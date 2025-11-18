@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { PRData } from '../types';
+import { PRData, UpgradeTestResult, UpgradeTestFilters, UpgradeTestStats } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
 export const api = {
   // Get all health check PRs
@@ -27,5 +27,34 @@ export const api = {
     // Try to parse as number
     const num = parseInt(input.replace(/\D/g, ''));
     return isNaN(num) ? null : num;
+  },
+
+  // Upgrade test endpoints
+  getUpgradeTests: async (filters?: {
+    fromVersion?: string;
+    toVersion?: string;
+    distro?: string;
+    hypervisor?: string;
+    status?: string;
+  }): Promise<UpgradeTestResult[]> => {
+    const params = new URLSearchParams();
+    if (filters?.fromVersion) params.append('fromVersion', filters.fromVersion);
+    if (filters?.toVersion) params.append('toVersion', filters.toVersion);
+    if (filters?.distro) params.append('distro', filters.distro);
+    if (filters?.hypervisor) params.append('hypervisor', filters.hypervisor);
+    if (filters?.status) params.append('status', filters.status);
+
+    const response = await axios.get(`${API_BASE_URL}/upgrade-tests?${params.toString()}`);
+    return response.data;
+  },
+
+  getUpgradeTestFilters: async (): Promise<UpgradeTestFilters> => {
+    const response = await axios.get(`${API_BASE_URL}/upgrade-tests/filters`);
+    return response.data;
+  },
+
+  getUpgradeTestStats: async (): Promise<UpgradeTestStats> => {
+    const response = await axios.get(`${API_BASE_URL}/upgrade-tests/stats`);
+    return response.data;
   },
 };

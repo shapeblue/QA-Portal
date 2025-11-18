@@ -13,18 +13,20 @@ This is a web portal displaying CloudStack health checks and other quality metri
 - **Code Coverage**: Integration with CodeCov (coming soon)
 - **Logs Access**: Direct links to test logs
 
-### Upgrade Tests (Coming Soon)
+### Upgrade Tests
 
-- Filter upgrade tests by version, distro, hypervisor, and status
-- View test results matrix
-- Trend visualization
-- Download results in CSV/JSON format
+- **Filter Tests**: Filter by version (from/to), distro, hypervisor, and status
+- **Statistics Dashboard**: View total tests, pass/fail counts, and latest test date
+- **Results Table**: Detailed view of all test results with duration and links
+- **Logs & Artifacts**: Direct access to test logs and artifacts
+- **Real-time Data**: Displays current running and pending tests
 
 ## Prerequisites
 
 - Node.js (v16 or higher)
 - npm or yarn
-- GitHub Personal Access Token (optional, but recommended to avoid rate limits)
+- MySQL database (local or remote)
+- VPN access to database server (if remote)
 
 ## Setup
 
@@ -47,20 +49,21 @@ This is a web portal displaying CloudStack health checks and other quality metri
 
 3. Configure environment variables:
    ```bash
+   cd server
    cp .env.example .env
    ```
    
-   Edit `.env` and add your GitHub token (optional but recommended):
+   Edit `server/.env` with your database credentials:
    ```
-   GITHUB_TOKEN=your_github_personal_access_token_here
-   PORT=5000
+   PORT=5001
+   DB_HOST=your_database_host
+   DB_PORT=3306
+   DB_NAME=cloudstack_tests
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
    ```
    
-   To create a GitHub token:
-   - Go to https://github.com/settings/tokens
-   - Click "Generate new token (classic)"
-   - Select the `repo` scope
-   - Copy the generated token
+   **Note**: Never commit the `.env` file. It contains sensitive credentials.
 
 4. Start the development servers:
    ```bash
@@ -94,9 +97,10 @@ QA-Portal/
 ├── server/              # Express backend
 │   ├── src/
 │   │   └── index.ts     # Server entry point
+│   ├── .env             # Environment variables (not committed)
+│   ├── .env.example     # Environment template
+│   ├── .gitignore       # Git ignore rules
 │   └── tsconfig.json
-├── .env                 # Environment variables (not committed)
-├── .env.example         # Environment template
 └── package.json         # Root package.json
 ```
 
@@ -104,7 +108,7 @@ QA-Portal/
 
 ### Viewing Health Check PRs
 
-When you open the dashboard, it automatically loads all active health check PRs from the Apache CloudStack repository. These are PRs with `[HEALTH]` in the title.
+When you open the dashboard, it automatically loads all active health check PRs from the database. These are PRs labeled with `type:healthcheckrun` in the `pr_health_labels` table.
 
 ### Searching for a Specific PR
 
@@ -152,16 +156,44 @@ npm run lint
 
 The backend provides the following REST API endpoints:
 
-- `GET /api/health-prs` - Get all open health check PRs
-- `GET /api/pr/:number` - Get a specific PR by number
+#### Health Check PRs
+- `GET /api/health-prs` - Get all health check PRs from database
+- `GET /api/pr/:number` - Get a specific PR by number from database
+
+#### Upgrade Tests
+- `GET /api/upgrade-tests` - Get upgrade test results with optional filters
+  - Query params: `fromVersion`, `toVersion`, `distro`, `hypervisor`, `status`
+- `GET /api/upgrade-tests/filters` - Get available filter options (versions, distros, hypervisors)
+- `GET /api/upgrade-tests/stats` - Get upgrade test statistics (total, passed, failed, running)
+
+#### System
 - `GET /api/health` - Health check endpoint
+
+### Database Schema
+
+The application uses the following MySQL tables:
+
+- `pr_health_labels` - PR information and labels
+- `pr_trillian_comments` - Smoke test results from Trillian bot
+- `pr_codecov_comments` - Code coverage data from Codecov
+- `upgrade_test_results` - Upgrade test results with the following key fields:
+  - `upgrade_start_version`, `upgrade_target_version` - Version information
+  - `management_server_os` - Operating system/distro
+  - `hypervisor`, `hypervisor_version` - Hypervisor details
+  - `overall_status` - Test status (PASS, FAIL, ERROR, SKIPPED, or NULL for in-progress)
+  - `timestamp_start`, `timestamp_end`, `duration_seconds` - Timing information
+  - `upgrade_console`, `error_log`, `upgrade_matrix_url` - Links to logs and resources
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub Personal Access Token | None (optional) |
-| `PORT` | Backend server port | 5000 |
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `PORT` | Backend server port | 5001 | No |
+| `DB_HOST` | MySQL database host | localhost | Yes |
+| `DB_PORT` | MySQL database port | 3306 | Yes |
+| `DB_NAME` | Database name | cloudstack_tests | Yes |
+| `DB_USER` | Database username | results | Yes |
+| `DB_PASSWORD` | Database password | - | Yes |
 
 ## Troubleshooting
 
