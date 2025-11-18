@@ -8,10 +8,25 @@
     "client": "cd client && npm start",
     "dev": "npm run server & npm run client",
     "build": "cd client && npm run build && cd ../server && tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && tsc",
+    "start": "node server/dist/index.js",
+    "clean": "rm -rf client/build server/dist",
+    "test": "cd client && npm test",
+    "lint": "cd client && npm run lint",
+    "install:all": "npm install && cd client && npm install && cd .."
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "cloudstack",
+    "qa",
+    "health-check",
+    "dashboard",
+    "testing",
+    "smoketest",
+    "github",
+    "pull-request"
+  ],
+  "author": "ShapeBlue",
   "license": "ISC",
   "dependencies": {
     "@octokit/rest": "^22.0.1",
