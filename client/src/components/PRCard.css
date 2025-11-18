@@ -1,0 +1,141 @@
+.pr-card {
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.pr-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.pr-card-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.pr-card-header h3 a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.pr-card-header h3 a:hover {
+  text-decoration: underline;
+}
+
+.pr-title {
+  color: #586069;
+  margin: 0 0 16px 0;
+  font-size: 14px;
+}
+
+.pr-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pr-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #24292e;
+}
+
+.approval-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.approval-item {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.approval-item.approved {
+  background: #dcffe4;
+  color: #0e5c23;
+}
+
+.approval-item.commented {
+  background: #fff5b1;
+  color: #6a5504;
+}
+
+.approval-item.rejected {
+  background: #ffeef0;
+  color: #86181d;
+}
+
+.smoketest-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smoketest-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.smoketest-item.ok {
+  background: #dcffe4;
+  color: #0e5c23;
+}
+
+.smoketest-item.fail {
+  background: #ffeef0;
+  color: #86181d;
+}
+
+.smoketest-item .hypervisor {
+  font-weight: 600;
+}
+
+.smoketest-item .result {
+  font-family: monospace;
+}
+
+.logs-link,
+.coverage-link {
+  color: #0366d6;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.logs-link:hover,
+.coverage-link:hover {
+  text-decoration: underline;
+}
+
+.coverage-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.coverage-info .positive {
+  color: #0e5c23;
+}
+
+.coverage-info .negative {
+  color: #86181d;
+}
+
+.pr-date {
+  color: #586069;
+  font-size: 13px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e1e4e8;
+}

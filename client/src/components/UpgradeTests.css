@@ -1,0 +1,83 @@
+.upgrade-tests {
+  padding: 24px;
+}
+
+.upgrade-tests h2 {
+  margin: 0 0 16px 0;
+  color: #24292e;
+}
+
+.upgrade-info {
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.upgrade-info p {
+  margin: 0 0 12px 0;
+}
+
+.upgrade-info ul {
+  margin: 8px 0 0 20px;
+  padding: 0;
+}
+
+.upgrade-info li {
+  margin-bottom: 4px;
+}
+
+.upgrade-filters {
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.upgrade-filters h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #24292e;
+}
+
+.filter-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-row select {
+  padding: 8px 12px;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.filter-row select:disabled {
+  background: #f6f8fa;
+  cursor: not-allowed;
+  color: #6a737d;
+}
+
+.upgrade-placeholder {
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 48px;
+  text-align: center;
+  color: #586069;
+}
+
+.upgrade-placeholder p {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.placeholder-note {
+  font-size: 14px;
+  font-style: italic;
+}
