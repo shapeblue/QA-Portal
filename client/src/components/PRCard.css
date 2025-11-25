@@ -79,12 +79,29 @@
   gap: 8px;
 }
 
+.smoketest-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
 .smoketest-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 8px 12px;
   border-radius: 4px;
   font-size: 14px;
+  gap: 8px;
+  transition: background-color 0.2s;
+}
+
+.smoketest-item.expandable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.smoketest-item.expandable:hover {
+  filter: brightness(0.95);
 }
 
 .smoketest-item.ok {
@@ -103,6 +120,63 @@
 
 .smoketest-item .result {
   font-family: monospace;
+  flex: 1;
+}
+
+.expand-icon {
+  font-size: 12px;
+  margin-right: 4px;
+  transition: transform 0.2s;
+}
+
+.failed-tests-list {
+  margin-top: 4px;
+  padding: 12px;
+  background: rgba(134, 24, 29, 0.05);
+  border-left: 3px solid #86181d;
+  border-radius: 0 4px 4px 0;
+}
+
+.failed-tests-header {
+  font-weight: 600;
+  font-size: 13px;
+  color: #86181d;
+  margin-bottom: 8px;
+}
+
+.failed-tests {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.failed-test-name {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: white;
+  border-radius: 3px;
+  color: #86181d;
+  border-left: 2px solid #d73a49;
+}
+
+.hypervisor-logs-icon {
+  font-size: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s, transform 0.2s;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.hypervisor-logs-icon:hover {
+  opacity: 1;
+  transform: scale(1.2);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .logs-link,

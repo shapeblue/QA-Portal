@@ -16,7 +16,8 @@ const UpgradeTests: React.FC = () => {
   const [stats, setStats] = useState<UpgradeTestStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'matrix' | 'grouped' | 'history'>('matrix');
+  const [viewMode, setViewMode] = useState<'heatmap' | 'matrix' | 'grouped' | 'history'>('heatmap');
+  const [selectedHeatmapCell, setSelectedHeatmapCell] = useState<{from: string, to: string} | null>(null);
   
   const [selectedFilters, setSelectedFilters] = useState({
     fromVersion: '',
@@ -30,7 +31,7 @@ const UpgradeTests: React.FC = () => {
     loadInitialData();
   }, []);
 
-  const loadInitialData = async () => {
+  const loadInitialData = async (retryCount = 0) => {
     setLoading(true);
     setError(null);
     try {
@@ -43,7 +44,16 @@ const UpgradeTests: React.FC = () => {
       setFilters(filtersData);
       setStats(statsData);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to load upgrade tests');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to load upgrade tests';
+      
+      // Retry on timeout errors (up to 2 retries)
+      if (errorMessage.includes('ETIMEDOUT') && retryCount < 2) {
+        console.log(`Retrying... (attempt ${retryCount + 1})`);
+        setTimeout(() => loadInitialData(retryCount + 1), 2000);
+        return;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -197,11 +207,59 @@ const UpgradeTests: React.FC = () => {
     ? Array.from(new Set(filters.versions.map(v => v.upgrade_target_version))).sort().reverse()
     : [];
 
+  // Create heatmap data structure
+  const createHeatmapData = () => {
+    const heatmapGrid: { [key: string]: { total: number, passed: number, failed: number, running: number, tests: UpgradeTestResult[] } } = {};
+    
+    validTests.forEach(test => {
+      const fromVersion = normalizeVersion(test.upgrade_start_version);
+      const toVersion = normalizeVersion(test.upgrade_target_version);
+      const key = `${fromVersion}->${toVersion}`;
+      
+      if (!heatmapGrid[key]) {
+        heatmapGrid[key] = { total: 0, passed: 0, failed: 0, running: 0, tests: [] };
+      }
+      
+      heatmapGrid[key].total++;
+      heatmapGrid[key].tests.push(test);
+      
+      if (test.overall_status === 'PASS') {
+        heatmapGrid[key].passed++;
+      } else if (test.overall_status === 'FAIL' || test.overall_status === 'ERROR') {
+        heatmapGrid[key].failed++;
+      } else if (!test.overall_status || !test.timestamp_end) {
+        heatmapGrid[key].running++;
+      }
+    });
+    
+    return heatmapGrid;
+  };
+
+  const heatmapData = createHeatmapData();
+  
+  // Get unique from/to versions for heatmap
+  const heatmapFromVersions = Array.from(new Set(validTests.map(t => normalizeVersion(t.upgrade_start_version)))).sort();
+  const heatmapToVersions = Array.from(new Set(validTests.map(t => normalizeVersion(t.upgrade_target_version)))).sort();
+
+  const getHeatmapCellColor = (passRate: number, hasRunning: boolean) => {
+    if (hasRunning) return 'cell-running';
+    if (passRate >= 90) return 'cell-pass-high';
+    if (passRate >= 70) return 'cell-pass-med';
+    if (passRate >= 50) return 'cell-pass-low';
+    return 'cell-fail';
+  };
+
   return (
     <div className="upgrade-tests">
       <div className="header-row">
         <h2>Upgrade Tests</h2>
         <div className="view-toggle">
+          <button 
+            className={`toggle-btn ${viewMode === 'heatmap' ? 'active' : ''}`}
+            onClick={() => setViewMode('heatmap')}
+          >
+            🗺️ Heatmap
+          </button>
           <button 
             className={`toggle-btn ${viewMode === 'matrix' ? 'active' : ''}`}
             onClick={() => setViewMode('matrix')}
@@ -222,38 +280,6 @@ const UpgradeTests: React.FC = () => {
           </button>
         </div>
       </div>
-      
-      {/* Stats Summary */}
-      {stats && (
-        <div className="upgrade-stats">
-          <div className="stat-card">
-            <h3>{stats.total}</h3>
-            <p>Total Tests</p>
-          </div>
-          <div className="stat-card pass">
-            <h3>{stats.passed}</h3>
-            <p>Passed</p>
-          </div>
-          <div className="stat-card fail">
-            <h3>{stats.failed}</h3>
-            <p>Failed</p>
-          </div>
-          <div className="stat-card fail">
-            <h3>{stats.error}</h3>
-            <p>Error</p>
-          </div>
-          <div className="stat-card running">
-            <h3>{stats.running}</h3>
-            <p>In Progress</p>
-          </div>
-          {stats.latest_test_date && (
-            <div className="stat-card">
-              <h3>{new Date(stats.latest_test_date).toLocaleDateString()}</h3>
-              <p>Latest Test</p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Filters */}
       <div className="upgrade-filters">
@@ -350,6 +376,130 @@ const UpgradeTests: React.FC = () => {
           {validTests.length === 0 ? (
             <div className="no-results">
               <p>No upgrade test results found</p>
+            </div>
+          ) : viewMode === 'heatmap' ? (
+            /* Heatmap View */
+            <div className="heatmap-view">
+              <div className="heatmap-container">
+                <h3>Upgrade Path Success Matrix</h3>
+                <div className="heatmap-grid">
+                  <div className="heatmap-header">
+                    <div className="heatmap-corner">From ↓ / To →</div>
+                    {heatmapToVersions.map(toVer => (
+                      <div key={toVer} className="heatmap-col-header">
+                        <strong>{toVer}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {heatmapFromVersions.map(fromVer => (
+                    <div key={fromVer} className="heatmap-row">
+                      <div className="heatmap-row-header"><strong>{fromVer}</strong></div>
+                      {heatmapToVersions.map(toVer => {
+                        const key = `${fromVer}->${toVer}`;
+                        const cellData = heatmapData[key];
+                        
+                        if (!cellData || cellData.total === 0) {
+                          return (
+                            <div key={toVer} className="heatmap-cell heatmap-cell-empty">
+                              <span className="cell-empty-text">n/a</span>
+                            </div>
+                          );
+                        }
+                        
+                        const passRate = (cellData.passed / cellData.total) * 100;
+                        const hasRunning = cellData.running > 0;
+                        const colorClass = getHeatmapCellColor(passRate, hasRunning);
+                        
+                        return (
+                          <div 
+                            key={toVer} 
+                            className={`heatmap-cell heatmap-cell-clickable ${colorClass}`}
+                            onClick={() => setSelectedHeatmapCell({ from: fromVer, to: toVer })}
+                          >
+                            <span className="cell-percentage">
+                              {hasRunning ? '⏳' : `${Math.round(passRate)}%`}
+                            </span>
+                            <span className="cell-test-count">
+                              {cellData.passed}/{cellData.total} passed
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Legend removed */}
+
+              {/* Detail Panel */}
+              {selectedHeatmapCell && (() => {
+                const key = `${selectedHeatmapCell.from}->${selectedHeatmapCell.to}`;
+                const cellData = heatmapData[key];
+                
+                if (!cellData) return null;
+                
+                // Create mini matrix for this path
+                const miniGroup = groupedTests.find(g => 
+                  g.from_version === selectedHeatmapCell.from && 
+                  g.to_version === selectedHeatmapCell.to
+                );
+                
+                if (!miniGroup) return null;
+                
+                const { osList, hypervisorList, latestTests } = createMatrixForGroup(miniGroup);
+                
+                return (
+                  <div className="heatmap-detail-panel">
+                    <div className="detail-panel-header">
+                      <h3>📊 Detailed View: {selectedHeatmapCell.from} → {selectedHeatmapCell.to}</h3>
+                      <button 
+                        className="close-detail-btn"
+                        onClick={() => setSelectedHeatmapCell(null)}
+                      >
+                        ✕ Close
+                      </button>
+                    </div>
+                    
+                    <div className="mini-matrix-container">
+                      <table className="mini-matrix-table">
+                        <thead>
+                          <tr>
+                            <th>OS</th>
+                            {hypervisorList.map(hv => (
+                              <th key={hv}>{hv}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {osList.map(os => (
+                            <tr key={os}>
+                              <td><strong>{os}</strong></td>
+                              {hypervisorList.map(hv => {
+                                const key = `${os}|${hv}`;
+                                const test = latestTests[key];
+                                
+                                return (
+                                  <td key={hv}>
+                                    {test ? (
+                                      <span className={`status-badge-small ${getStatusClass(test.overall_status)}`}>
+                                        {getStatusDisplay(test.overall_status)}
+                                      </span>
+                                    ) : (
+                                      <span className="empty">-</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : viewMode === 'matrix' ? (
             /* Matrix View */

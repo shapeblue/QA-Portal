@@ -3,6 +3,8 @@ export interface SmokeTestResult {
   passed: number;
   total: number;
   status: 'OK' | 'FAIL';
+  logsUrl?: string;
+  failedTests?: string[];
 }
 
 export interface PRData {

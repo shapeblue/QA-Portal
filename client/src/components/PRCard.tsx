@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PRData } from '../types';
 import './PRCard.css';
 
@@ -7,6 +7,20 @@ interface PRCardProps {
 }
 
 const PRCard: React.FC<PRCardProps> = ({ pr }) => {
+  const [expandedTests, setExpandedTests] = useState<Set<number>>(new Set());
+
+  const toggleTest = (index: number) => {
+    setExpandedTests(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -51,17 +65,63 @@ const PRCard: React.FC<PRCardProps> = ({ pr }) => {
           <div className="pr-section">
             <h4>Smoketests:</h4>
             <div className="smoketest-results">
-              {pr.smokeTests.map((test, index) => (
-                <div
-                  key={index}
-                  className={`smoketest-item ${test.status.toLowerCase()}`}
-                >
-                  <span className="hypervisor">{test.hypervisor}:</span>
-                  <span className="result">
-                    {test.status} {test.passed}/{test.total}
-                  </span>
-                </div>
-              ))}
+              {pr.smokeTests.map((test, index) => {
+                const hasFailures = test.status === 'FAIL';
+                const canExpand = hasFailures && test.failedTests !== undefined;
+                
+                return (
+                  <div key={index} className="smoketest-wrapper">
+                    <div
+                      className={`smoketest-item ${test.status.toLowerCase()} ${canExpand ? 'expandable' : ''}`}
+                      onClick={() => canExpand && toggleTest(index)}
+                    >
+                      {canExpand && (
+                        <span className="expand-icon">
+                          {expandedTests.has(index) ? '▼' : '▶'}
+                        </span>
+                      )}
+                      <span className="hypervisor">{test.hypervisor}:</span>
+                      <span className="result">
+                        {test.status} {test.passed}/{test.total}
+                      </span>
+                      {test.logsUrl && (
+                        <a
+                          href={test.logsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hypervisor-logs-icon"
+                          title="View logs for this hypervisor"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          📋
+                        </a>
+                      )}
+                    </div>
+                    {expandedTests.has(index) && canExpand && (
+                      <div className="failed-tests-list">
+                        {test.failedTests && test.failedTests.length > 0 ? (
+                          <>
+                            <div className="failed-tests-header">
+                              Failed Tests ({test.failedTests.length} unique{test.total - test.passed !== test.failedTests.length ? `, ${test.total - test.passed} total failures` : ''}):
+                            </div>
+                            <ul className="failed-tests">
+                              {test.failedTests.map((testName, testIndex) => (
+                                <li key={testIndex} className="failed-test-name">
+                                  {testName}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : (
+                          <div className="failed-tests-header">
+                            {test.total - test.passed} test(s) failed. Unable to parse test names from comment. Check logs for details.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

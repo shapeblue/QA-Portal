@@ -3,16 +3,24 @@ import { PRData, UpgradeTestResult, UpgradeTestFilters, UpgradeTestStats } from 
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
+// Create axios instance with longer timeout
+const axiosInstance = axios.create({
+  timeout: 60000, // 60 second timeout
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 export const api = {
   // Get all health check PRs
   getHealthPRs: async (): Promise<PRData[]> => {
-    const response = await axios.get(`${API_BASE_URL}/health-prs`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/health-prs`);
     return response.data;
   },
 
   // Get specific PR by number
   getPR: async (prNumber: number): Promise<PRData> => {
-    const response = await axios.get(`${API_BASE_URL}/pr/${prNumber}`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/pr/${prNumber}`);
     return response.data;
   },
 
@@ -44,17 +52,17 @@ export const api = {
     if (filters?.hypervisor) params.append('hypervisor', filters.hypervisor);
     if (filters?.status) params.append('status', filters.status);
 
-    const response = await axios.get(`${API_BASE_URL}/upgrade-tests?${params.toString()}`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/upgrade-tests?${params.toString()}`);
     return response.data;
   },
 
   getUpgradeTestFilters: async (): Promise<UpgradeTestFilters> => {
-    const response = await axios.get(`${API_BASE_URL}/upgrade-tests/filters`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/upgrade-tests/filters`);
     return response.data;
   },
 
   getUpgradeTestStats: async (): Promise<UpgradeTestStats> => {
-    const response = await axios.get(`${API_BASE_URL}/upgrade-tests/stats`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/upgrade-tests/stats`);
     return response.data;
   },
 };
