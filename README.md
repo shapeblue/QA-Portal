@@ -220,9 +220,13 @@ The application uses the following MySQL tables:
 
 ## Troubleshooting
 
-### Rate Limiting
+### Database Connection Issues
 
-If you see rate limiting errors, add a GitHub token to your `.env` file. Without authentication, GitHub limits API requests to 60 per hour.
+If you cannot connect to the database:
+- Verify VPN connection (if database is remote)
+- Check database credentials in `.env`
+- Ensure database server is running and accessible
+- Verify firewall rules allow connection to database port
 
 ### Port Already in Use
 
