@@ -9,17 +9,40 @@ This is a web portal displaying CloudStack health checks and other quality metri
 - **Active Health Check Runs**: Automatically displays all open PRs with `[HEALTH]` in the title
 - **PR Search**: Search for any PR by number or GitHub URL
 - **Smoketest Results**: Displays smoketest results from BlueOrangutan bot comments
+  - ✅ Download logs icon for each hypervisor test
+  - ✅ Test execution timestamps
+  - ✅ Expandable failure details with failed test names
 - **Approvals**: Shows approval counts (approved, commented, changes requested)
-- **Code Coverage**: Integration with CodeCov (coming soon)
+- **Code Coverage**: Integration with CodeCov
 - **Logs Access**: Direct links to test logs
 
 ### Upgrade Tests
 
+- **Multiple View Modes**:
+  - 🗺️ **Heatmap** (default): Visual success rate grid for upgrade paths
+  - **All Upgrade Paths**: Accordion view with expandable test details
+  - **Historical Runs**: Chronological table of all tests
 - **Filter Tests**: Filter by version (from/to), distro, hypervisor, and status
 - **Statistics Dashboard**: View total tests, pass/fail counts, and latest test date
-- **Results Table**: Detailed view of all test results with duration and links
-- **Logs & Artifacts**: Direct access to test logs and artifacts
+- **Rich Test Details**:
+  - Formatted OS names (e.g., "Ubuntu 22.04" instead of "u22")
+  - Formatted hypervisor versions (e.g., "vSphere 7.0 U3" instead of "70u3")
+  - Test data created indicator with checkbox
+  - Expandable failure information showing failure stage
+  - Duration and timestamps for each test
+- **Logs & Artifacts**: Direct access to test logs, error logs, and upgrade matrix URLs
 - **Real-time Data**: Displays current running and pending tests
+
+## Security
+
+🔒 **Security Features**:
+- SQL injection prevention via parameterized queries
+- XSS protection through React auto-escaping
+- CORS properly configured
+- Environment variables for secrets management
+- Read-only database access recommended
+
+See [SECURITY.md](./SECURITY.md) for detailed security information.
 
 ## Prerequisites
 
