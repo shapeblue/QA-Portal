@@ -535,6 +535,8 @@ async function getUpgradeTestsFromDatabase(filters?: {
       build_console
     FROM upgrade_test_results
     WHERE 1=1
+      AND (upgrade_start_version IS NOT NULL AND upgrade_start_version != 'null' AND upgrade_start_version != '')
+      AND (upgrade_target_version IS NOT NULL AND upgrade_target_version != 'null' AND upgrade_target_version != '')
   `;
   
   const params: any[] = [];
@@ -572,7 +574,15 @@ async function getUpgradeTestsFromDatabase(filters?: {
 
 async function getUpgradeTestFilters() {
   const versions = await queryWithRetry<any[]>(
-    'SELECT DISTINCT upgrade_start_version, upgrade_target_version FROM upgrade_test_results WHERE upgrade_start_version IS NOT NULL AND upgrade_target_version IS NOT NULL ORDER BY upgrade_start_version DESC'
+    `SELECT DISTINCT upgrade_start_version, upgrade_target_version 
+     FROM upgrade_test_results 
+     WHERE upgrade_start_version IS NOT NULL 
+       AND upgrade_target_version IS NOT NULL
+       AND upgrade_start_version != 'null'
+       AND upgrade_target_version != 'null'
+       AND upgrade_start_version != ''
+       AND upgrade_target_version != ''
+     ORDER BY upgrade_start_version DESC`
   );
   
   const distros = await queryWithRetry<any[]>(
@@ -601,6 +611,8 @@ async function getUpgradeTestStats() {
       SUM(CASE WHEN overall_status IS NULL THEN 1 ELSE 0 END) as running,
       MAX(timestamp_start) as latest_test_date
     FROM upgrade_test_results
+    WHERE (upgrade_start_version IS NOT NULL AND upgrade_start_version != 'null' AND upgrade_start_version != '')
+      AND (upgrade_target_version IS NOT NULL AND upgrade_target_version != 'null' AND upgrade_target_version != '')
   `);
   
   return stats[0];
