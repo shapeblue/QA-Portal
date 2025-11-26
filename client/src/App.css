@@ -26,6 +26,40 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.cloudstack-logo {
+  height: 80px;
+  width: auto;
+  /* Removed filter to show original CloudStack colors */
+}
+
+.header-text {
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .header-text {
+    text-align: center;
+  }
+  
+  .cloudstack-logo {
+    height: 60px;
+  }
+}
+
 .app-header h1 {
   margin: 0 0 8px 0;
   font-size: 32px;
@@ -177,10 +211,18 @@ body {
 .app-footer {
   background: white;
   border-top: 1px solid #e1e4e8;
-  padding: 16px 24px;
+  padding: 24px;
   text-align: center;
   color: #586069;
   font-size: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.footer-logo {
+  height: 60px;
+  width: auto;
 }
 
 .app-footer p {
