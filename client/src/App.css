@@ -29,20 +29,21 @@ body {
 .header-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  justify-content: flex-start;
+  gap: 0;
   max-width: 1200px;
-  margin: 0 auto;
+  margin: 0 auto 16px auto;
 }
 
 .cloudstack-logo {
-  height: 80px;
+  height: 50px;
   width: auto;
   /* Removed filter to show original CloudStack colors */
 }
 
 .header-text {
-  text-align: left;
+  text-align: center;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
@@ -211,18 +212,10 @@ body {
 .app-footer {
   background: white;
   border-top: 1px solid #e1e4e8;
-  padding: 24px;
+  padding: 16px 24px;
   text-align: center;
   color: #586069;
   font-size: 14px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.footer-logo {
-  height: 60px;
-  width: auto;
 }
 
 .app-footer p {

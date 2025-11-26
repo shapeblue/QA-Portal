@@ -65,11 +65,11 @@ function App() {
     <div className="App">
       <header className="app-header">
         <div className="header-content">
-          <div className="header-text">
-            <h1>CloudStack PR Health Dashboard</h1>
-            <p className="subtitle">Monitor health checks and quality metrics for CloudStack</p>
-          </div>
           <img src="/cloudstack-logo-color.svg" alt="Apache CloudStack" className="cloudstack-logo" />
+        </div>
+        <div className="header-text">
+          <h1>CloudStack PR Health Dashboard</h1>
+          <p className="subtitle">Monitor health checks and quality metrics for CloudStack</p>
         </div>
       </header>
 
@@ -150,7 +150,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <img src="/cloudstack-logo-color.svg" alt="Apache CloudStack" className="footer-logo" />
+        <p>QA Portal - Health Check Dashboard</p>
       </footer>
     </div>
   );
