@@ -30,20 +30,21 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0;
+  gap: 24px;
   max-width: 1200px;
-  margin: 0 auto 16px auto;
+  margin: 0 auto;
 }
 
 .cloudstack-logo {
   height: 50px;
   width: auto;
+  flex-shrink: 0;
   /* Removed filter to show original CloudStack colors */
 }
 
 .header-text {
-  text-align: center;
-  width: 100%;
+  text-align: left;
+  flex: 1;
 }
 
 @media (max-width: 768px) {
