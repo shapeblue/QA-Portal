@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { PRData, UpgradeTestResult, UpgradeTestFilters, UpgradeTestStats } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 // Create axios instance with longer timeout
 const axiosInstance = axios.create({

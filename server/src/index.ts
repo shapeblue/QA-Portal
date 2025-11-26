@@ -6,7 +6,7 @@ import mysql from 'mysql2/promise';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = parseInt(process.env.PORT || '5001');
 
 // Middleware
 app.use(cors());
@@ -65,6 +65,7 @@ interface SmokeTestResult {
   status: 'OK' | 'FAIL';
   logsUrl?: string;
   failedTests?: string[];
+  createdAt?: string;
 }
 
 interface PRData {
@@ -260,7 +261,8 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
             total,
             status: (errorMatch && parseInt(errorMatch[1]) > 0) ? 'FAIL' as const : 'OK' as const,
             logsUrl,
-            failedTests: failedTests.length > 0 ? failedTests : undefined
+            failedTests: failedTests.length > 0 ? failedTests : undefined,
+            createdAt: tr.trillian_created_at
           };
         }
         return null;
@@ -419,7 +421,8 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
           status: hasErrors ? 'FAIL' as const : 'OK' as const,
           logsUrl,
           // Always include failedTests array when there are errors (even if parsing failed)
-          failedTests: hasErrors ? (failedTests.length > 0 ? failedTests : []) : undefined
+          failedTests: hasErrors ? (failedTests.length > 0 ? failedTests : []) : undefined,
+          createdAt: tr.trillian_created_at
         };
       }
       return null;
@@ -683,6 +686,6 @@ app.get('/api/health', (req: Request, res: Response) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });

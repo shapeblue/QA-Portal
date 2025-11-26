@@ -5,6 +5,7 @@ export interface SmokeTestResult {
   status: 'OK' | 'FAIL';
   logsUrl?: string;
   failedTests?: string[];
+  createdAt?: string;
 }
 
 export interface PRData {

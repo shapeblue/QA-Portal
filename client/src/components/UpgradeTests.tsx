@@ -16,8 +16,10 @@ const UpgradeTests: React.FC = () => {
   const [stats, setStats] = useState<UpgradeTestStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'heatmap' | 'matrix' | 'grouped' | 'history'>('heatmap');
+  const [viewMode, setViewMode] = useState<'heatmap' | 'history' | 'accordion'>('heatmap');
   const [selectedHeatmapCell, setSelectedHeatmapCell] = useState<{from: string, to: string} | null>(null);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [expandedTests, setExpandedTests] = useState<Set<number>>(new Set());
   
   const [selectedFilters, setSelectedFilters] = useState({
     fromVersion: '',
@@ -26,6 +28,73 @@ const UpgradeTests: React.FC = () => {
     hypervisor: '',
     status: '',
   });
+
+  // OS name mapping function
+  const formatOSName = (osCode: string | null | undefined): string => {
+    if (!osCode) return '-';
+    
+    const osMap: { [key: string]: string } = {
+      // Ubuntu
+      'u20': 'Ubuntu 20.04',
+      'u22': 'Ubuntu 22.04',
+      'u24': 'Ubuntu 24.04',
+      // Oracle Linux
+      'ol8': 'Oracle Linux 8',
+      'ol9': 'Oracle Linux 9',
+      'ol10': 'Oracle Linux 10',
+      // Rocky Linux
+      'r8': 'Rocky Linux 8',
+      'r9': 'Rocky Linux 9',
+      'r10': 'Rocky Linux 10',
+      // AlmaLinux
+      'a8': 'AlmaLinux 8',
+      'a9': 'AlmaLinux 9',
+      'a10': 'AlmaLinux 10',
+      // Debian
+      'd12': 'Debian 12',
+      // SUSE
+      's15': 'OpenSUSE 15',
+    };
+    
+    return osMap[osCode.toLowerCase()] || osCode;
+  };
+
+  // Hypervisor version mapping function
+  const formatHypervisorVersion = (hvVersion: string | null | undefined): string => {
+    if (!hvVersion) return '';
+    
+    const hvMap: { [key: string]: string } = {
+      // KVM/Ubuntu
+      'ubuntu20': 'Ubuntu 20.04',
+      'ubuntu22': 'Ubuntu 22.04',
+      'ubuntu24': 'Ubuntu 24.04',
+      // KVM/Oracle Linux
+      'ol8': 'Oracle Linux 8',
+      'ol9': 'Oracle Linux 9',
+      'ol10': 'Oracle Linux 10',
+      // KVM/Rocky Linux
+      'rocky8': 'Rocky Linux 8',
+      'rocky9': 'Rocky Linux 9',
+      'rocky10': 'Rocky Linux 10',
+      // KVM/AlmaLinux
+      'alma8': 'AlmaLinux 8',
+      'alma9': 'AlmaLinux 9',
+      'alma10': 'AlmaLinux 10',
+      // KVM/Debian
+      'debian12': 'Debian 12',
+      // KVM/SUSE
+      'sles15': 'SLES 15',
+      // VMware versions
+      '70u3': 'vSphere 7.0 U3',
+      '80u3': 'vSphere 8.0 U3',
+      '80u2': 'vSphere 8.0 U2',
+      // XCP-ng versions
+      'xcpng82': 'XCP-ng 8.2',
+      'xcpng83': 'XCP-ng 8.3',
+    };
+    
+    return hvMap[hvVersion.toLowerCase()] || hvVersion;
+  };
 
   useEffect(() => {
     loadInitialData();
@@ -120,6 +189,57 @@ const UpgradeTests: React.FC = () => {
     });
   };
 
+  const getRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return `${Math.floor(diffDays / 30)} months ago`;
+  };
+
+  const togglePathExpansion = (path: string) => {
+    setExpandedPaths(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleTestExpansion = (testId: number) => {
+    setExpandedTests(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(testId)) {
+        newSet.delete(testId);
+      } else {
+        newSet.add(testId);
+      }
+      return newSet;
+    });
+  };
+
+  const formatFailureStage = (stage: string | null | undefined): string => {
+    if (!stage) return '';
+    
+    const stageMap: { [key: string]: string } = {
+      'environment_setup': 'Environment Setup',
+      'upgrade_execution': 'Upgrade Execution',
+      'post_upgrade_verification': 'Post-Upgrade Verification',
+      'upgrade': 'Upgrade Process',
+      'build': 'Build Process',
+    };
+    
+    return stageMap[stage.toLowerCase()] || stage;
+  };
+
   const getStatusClass = (status?: string | null) => {
     switch (status) {
       case 'PASS':
@@ -179,8 +299,8 @@ const UpgradeTests: React.FC = () => {
 
     // Find latest test for each OS + Hypervisor combination
     group.tests.forEach(test => {
-      const os = test.management_server_os || 'Unknown';
-      const hypervisor = `${test.hypervisor || 'Unknown'}${test.hypervisor_version ? ` (${test.hypervisor_version})` : ''}`;
+      const os = formatOSName(test.management_server_os);
+      const hypervisor = `${test.hypervisor || 'Unknown'}${test.hypervisor_version ? ` (${formatHypervisorVersion(test.hypervisor_version)})` : ''}`;
       const key = `${os}|${hypervisor}`;
       
       osSet.add(os);
@@ -261,16 +381,10 @@ const UpgradeTests: React.FC = () => {
             🗺️ Heatmap
           </button>
           <button 
-            className={`toggle-btn ${viewMode === 'matrix' ? 'active' : ''}`}
-            onClick={() => setViewMode('matrix')}
+            className={`toggle-btn ${viewMode === 'accordion' ? 'active' : ''}`}
+            onClick={() => setViewMode('accordion')}
           >
-            Matrix View
-          </button>
-          <button 
-            className={`toggle-btn ${viewMode === 'grouped' ? 'active' : ''}`}
-            onClick={() => setViewMode('grouped')}
-          >
-            Detailed View
+            All Upgrade Paths
           </button>
           <button 
             className={`toggle-btn ${viewMode === 'history' ? 'active' : ''}`}
@@ -376,6 +490,114 @@ const UpgradeTests: React.FC = () => {
           {validTests.length === 0 ? (
             <div className="no-results">
               <p>No upgrade test results found</p>
+            </div>
+          ) : viewMode === 'accordion' ? (
+            /* Accordion View */
+            <div className="accordion-view">
+              {groupedTests.map((group) => {
+                const isExpanded = expandedPaths.has(group.upgrade_path);
+                const passCount = group.tests.filter((t: UpgradeTestResult) => t.overall_status === 'PASS').length;
+                const failCount = group.tests.filter((t: UpgradeTestResult) => t.overall_status === 'FAIL').length;
+                const errorCount = group.tests.filter((t: UpgradeTestResult) => t.overall_status === 'ERROR').length;
+                const runningCount = group.tests.filter((t: UpgradeTestResult) => !t.overall_status).length;
+                
+                return (
+                  <div key={group.upgrade_path} className="accordion-item">
+                    <div 
+                      className="accordion-header"
+                      onClick={() => togglePathExpansion(group.upgrade_path)}
+                    >
+                      <span className="accordion-icon">{isExpanded ? '▼' : '▶'}</span>
+                      <span className="accordion-title">
+                        <span className="version-badge from">{group.from_version}</span>
+                        <span className="arrow">→</span>
+                        <span className="version-badge to">{group.to_version}</span>
+                      </span>
+                      <span className="accordion-summary">
+                        ({group.tests.length} test{group.tests.length !== 1 ? 's' : ''}:
+                        {passCount > 0 && <span className="summary-pass"> {passCount} pass</span>}
+                        {failCount > 0 && <span className="summary-fail"> {failCount} fail</span>}
+                        {errorCount > 0 && <span className="summary-error"> {errorCount} error</span>}
+                        {runningCount > 0 && <span className="summary-running"> {runningCount} running</span>})
+                      </span>
+                    </div>
+                    
+                    {isExpanded && (
+                      <div className="accordion-content">
+                        {group.tests.map((test: UpgradeTestResult) => {
+                          const statusIcon = test.overall_status === 'PASS' ? '✓' : 
+                                           test.overall_status === 'FAIL' ? '✗' : 
+                                           test.overall_status === 'ERROR' ? '⚠' : '⏳';
+                          const durationMin = test.duration_seconds ? Math.round(test.duration_seconds / 60) : null;
+                          const hasFailureInfo = (test.overall_status === 'FAIL' || test.overall_status === 'ERROR') && 
+                                                (test.failure_stage || test.error_log);
+                          const isTestExpanded = expandedTests.has(test.id);
+                          
+                          return (
+                            <div key={test.id}>
+                              <div 
+                                className={`accordion-test-item ${getStatusClass(test.overall_status)} ${hasFailureInfo ? 'clickable' : ''}`}
+                                onClick={() => hasFailureInfo && toggleTestExpansion(test.id)}
+                              >
+                                {hasFailureInfo && (
+                                  <span className="test-expand-icon">{isTestExpanded ? '▼' : '▶'}</span>
+                                )}
+                                <span className="test-status-icon">{statusIcon}</span>
+                                <span className="test-info">
+                                  <strong>{formatOSName(test.management_server_os)}</strong> + {test.hypervisor || '-'}
+                                  {test.hypervisor_version && ` (${formatHypervisorVersion(test.hypervisor_version)})`}
+                                </span>
+                                <span className={`test-status ${getStatusClass(test.overall_status)}`}>
+                                  {getStatusDisplay(test.overall_status)}
+                                </span>
+                                <span className="test-data-checkbox" title="Test data was created during upgrade">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={test.tests_data_created === 'true'} 
+                                    readOnly 
+                                    disabled 
+                                  />
+                                  <label>Test Data</label>
+                                </span>
+                                {durationMin && <span className="test-duration">{durationMin}m</span>}
+                                <span className="test-actions">
+                                  {test.upgrade_console && (
+                                    <a href={test.upgrade_console} target="_blank" rel="noopener noreferrer" title="Console" onClick={(e) => e.stopPropagation()}>📋</a>
+                                  )}
+                                  {test.error_log && (
+                                    <a href={test.error_log} target="_blank" rel="noopener noreferrer" title="Logs" onClick={(e) => e.stopPropagation()}>📄</a>
+                                  )}
+                                  {test.upgrade_matrix_url && (
+                                    <a href={test.upgrade_matrix_url} target="_blank" rel="noopener noreferrer" title="Matrix" onClick={(e) => e.stopPropagation()}>🔗</a>
+                                  )}
+                                </span>
+                              </div>
+                              
+                              {isTestExpanded && hasFailureInfo && (
+                                <div className="test-failure-details">
+                                  {test.failure_stage && (
+                                    <div className="failure-stage">
+                                      <strong>Failed at:</strong> {formatFailureStage(test.failure_stage)}
+                                    </div>
+                                  )}
+                                  {test.error_log && (
+                                    <div className="failure-log">
+                                      <strong>Error Log:</strong>{' '}
+                                      <a href={test.error_log} target="_blank" rel="noopener noreferrer">
+                                        View full error log →
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : viewMode === 'heatmap' ? (
             /* Heatmap View */
@@ -483,9 +705,20 @@ const UpgradeTests: React.FC = () => {
                                 return (
                                   <td key={hv}>
                                     {test ? (
-                                      <span className={`status-badge-small ${getStatusClass(test.overall_status)}`}>
-                                        {getStatusDisplay(test.overall_status)}
-                                      </span>
+                                      <div className="heatmap-cell-content">
+                                        <span className={`status-badge-small ${getStatusClass(test.overall_status)}`}>
+                                          {getStatusDisplay(test.overall_status)}
+                                        </span>
+                                        <div className="heatmap-data-check">
+                                          <input 
+                                            type="checkbox" 
+                                            checked={test.tests_data_created === 'true'} 
+                                            readOnly 
+                                            disabled 
+                                            title="Test data was created during upgrade"
+                                          />
+                                        </div>
+                                      </div>
                                     ) : (
                                       <span className="empty">-</span>
                                     )}
@@ -501,79 +734,6 @@ const UpgradeTests: React.FC = () => {
                 );
               })()}
             </div>
-          ) : viewMode === 'matrix' ? (
-            /* Matrix View */
-            <div className="version-groups">
-              {groupedTests.map((group) => {
-                const { osList, hypervisorList, latestTests } = createMatrixForGroup(group);
-                
-                return (
-                  <div key={group.upgrade_path} className="version-group">
-                    <div className="version-group-header">
-                      <h3>
-                        Upgrade: <span className="version-badge">{group.from_version}</span> → <span className="version-badge">{group.to_version}</span>
-                      </h3>
-                      <span className="test-count">{Object.keys(latestTests).length} unique combinations</span>
-                    </div>
-                    
-                    <div className="matrix-table-container">
-                      <table className="matrix-table">
-                        <thead>
-                          <tr>
-                            <th className="os-header">Management Server OS</th>
-                            {hypervisorList.map(hv => (
-                              <th key={hv} className="hypervisor-header">{hv}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {osList.map(os => (
-                            <tr key={os}>
-                              <td className="os-cell"><strong>{os}</strong></td>
-                              {hypervisorList.map(hv => {
-                                const key = `${os}|${hv}`;
-                                const test = latestTests[key];
-                                
-                                return (
-                                  <td key={hv} className="matrix-cell">
-                                    {test ? (
-                                      <div className="matrix-cell-content">
-                                        <span className={`status-badge-small ${getStatusClass(test.overall_status)}`}>
-                                          {getStatusDisplay(test.overall_status)}
-                                        </span>
-                                        <div className="cell-details">
-                                          <span className="cell-time">{formatDate(test.timestamp_start)}</span>
-                                          {test.duration_seconds && (
-                                            <span className="cell-duration">{Math.round(test.duration_seconds / 60)}m</span>
-                                          )}
-                                        </div>
-                                        <div className="cell-actions">
-                                          {test.upgrade_console && (
-                                            <a href={test.upgrade_console} target="_blank" rel="noopener noreferrer" title="Console">📋</a>
-                                          )}
-                                          {test.error_log && (
-                                            <a href={test.error_log} target="_blank" rel="noopener noreferrer" title="Logs">📄</a>
-                                          )}
-                                          {test.upgrade_matrix_url && (
-                                            <a href={test.upgrade_matrix_url} target="_blank" rel="noopener noreferrer" title="Matrix">🔗</a>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <span className="no-test">-</span>
-                                    )}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           ) : viewMode === 'history' ? (
             /* Historical Runs View - moved to after history check */
             <div className="history-view">
@@ -586,6 +746,7 @@ const UpgradeTests: React.FC = () => {
                       <th>OS</th>
                       <th>Hypervisor</th>
                       <th>Status</th>
+                      <th title="Test data was created during upgrade">Test Data</th>
                       <th>Duration</th>
                       <th>Date</th>
                       <th>Actions</th>
@@ -596,15 +757,24 @@ const UpgradeTests: React.FC = () => {
                       <tr key={test.id}>
                         <td className="compact-cell">{normalizeVersion(test.upgrade_start_version)}</td>
                         <td className="compact-cell">{normalizeVersion(test.upgrade_target_version)}</td>
-                        <td className="compact-cell">{test.management_server_os || '-'}</td>
+                        <td className="compact-cell">{formatOSName(test.management_server_os)}</td>
                         <td className="compact-cell">
                           {test.hypervisor || '-'}
-                          {test.hypervisor_version && ` (${test.hypervisor_version})`}
+                          {test.hypervisor_version && ` (${formatHypervisorVersion(test.hypervisor_version)})`}
                         </td>
                         <td>
                           <span className={`status-badge-small ${getStatusClass(test.overall_status)}`}>
                             {getStatusDisplay(test.overall_status)}
                           </span>
+                        </td>
+                        <td className="compact-cell">
+                          <input 
+                            type="checkbox" 
+                            checked={test.tests_data_created === 'true'} 
+                            readOnly 
+                            disabled 
+                            title="Test data was created during upgrade"
+                          />
                         </td>
                         <td className="compact-cell">
                           {test.duration_seconds 
@@ -636,97 +806,7 @@ const UpgradeTests: React.FC = () => {
                 </table>
               </div>
             </div>
-          ) : (
-            /* Grouped/Detailed View */
-            <div className="version-groups">
-              {groupedTests.map((group) => (
-                <div key={group.upgrade_path} className="version-group">
-                  <div className="version-group-header">
-                    <h3>
-                      Upgrade: <span className="version-badge">{group.from_version}</span> → <span className="version-badge">{group.to_version}</span>
-                    </h3>
-                    <span className="test-count">{group.tests.length} test{group.tests.length !== 1 ? 's' : ''}</span>
-                  </div>
-                  
-                  <div className="results-table-container">
-                    <table className="results-table">
-                      <thead>
-                        <tr>
-                          <th>Management Server OS</th>
-                          <th>Hypervisor</th>
-                          <th>Status</th>
-                          <th>Duration</th>
-                          <th>Start Time</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.tests.map((test: UpgradeTestResult) => (
-                          <tr key={test.id}>
-                            <td>
-                              <strong>{test.management_server_os || '-'}</strong>
-                            </td>
-                            <td>
-                              <strong>{test.hypervisor || '-'}</strong>
-                              {test.hypervisor_version && (
-                                <span className="hypervisor-version"> ({test.hypervisor_version})</span>
-                              )}
-                            </td>
-                            <td>
-                              <span className={`status-badge ${getStatusClass(test.overall_status)}`}>
-                                {getStatusDisplay(test.overall_status)}
-                              </span>
-                            </td>
-                            <td>
-                              {test.duration_seconds 
-                                ? `${Math.round(test.duration_seconds / 60)} min` 
-                                : '-'}
-                            </td>
-                            <td className="timestamp">{formatDate(test.timestamp_start)}</td>
-                            <td className="actions-cell">
-                              {test.upgrade_console && (
-                                <a
-                                  href={test.upgrade_console}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="action-link"
-                                  title="View upgrade console"
-                                >
-                                  Console
-                                </a>
-                              )}
-                              {test.error_log && (
-                                <a
-                                  href={test.error_log}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="action-link"
-                                  title="View error logs"
-                                >
-                                  Logs
-                                </a>
-                              )}
-                              {test.upgrade_matrix_url && (
-                                <a
-                                  href={test.upgrade_matrix_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="action-link"
-                                  title="View upgrade matrix"
-                                >
-                                  Matrix
-                                </a>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : null}
         </>
       )}
     </div>

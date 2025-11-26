@@ -84,16 +84,21 @@ const PRCard: React.FC<PRCardProps> = ({ pr }) => {
                       <span className="result">
                         {test.status} {test.passed}/{test.total}
                       </span>
+                      {test.createdAt && (
+                        <span className="test-date">
+                          {formatDate(test.createdAt)}
+                        </span>
+                      )}
                       {test.logsUrl && (
                         <a
                           href={test.logsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="hypervisor-logs-icon"
-                          title="View logs for this hypervisor"
+                          title="Download logs"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          📋
+                          📥
                         </a>
                       )}
                     </div>
