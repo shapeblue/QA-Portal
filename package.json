@@ -1,0 +1,46 @@
+{
+  "name": "qa-portal",
+  "version": "1.0.0",
+  "description": "This is a web portal displaying Cloudstack health checks and other quality metrics",
+  "main": "index.js",
+  "scripts": {
+    "server": "cd server && nodemon --exec ts-node src/index.ts",
+    "client": "cd client && npm start",
+    "dev": "npm run server & npm run client",
+    "build": "cd client && npm run build && cd ../server && tsc",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && tsc",
+    "start": "node server/dist/index.js",
+    "clean": "rm -rf client/build server/dist",
+    "test": "cd client && npm test",
+    "lint": "cd client && npm run lint",
+    "install:all": "npm install && cd client && npm install && cd .."
+  },
+  "keywords": [
+    "cloudstack",
+    "qa",
+    "health-check",
+    "dashboard",
+    "testing",
+    "smoketest",
+    "github",
+    "pull-request"
+  ],
+  "author": "ShapeBlue",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "mysql2": "^3.15.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.1",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
