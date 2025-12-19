@@ -15,6 +15,17 @@ This is a web portal displaying CloudStack health checks and other quality metri
 - **Approvals**: Shows approval counts (approved, commented, changes requested)
 - **Code Coverage**: Integration with CodeCov
 - **Logs Access**: Direct links to test logs
+- **Automated Data Collection**: GitHub PR scraper runs periodically via cron job
+
+### GitHub PR Scraper (NEW)
+
+The portal includes an automated scraper that collects PR data from GitHub:
+- **Code Coverage**: Codecov bot comments with coverage percentages
+- **LGTM Approvals**: All PR reviews (APPROVED, CHANGES_REQUESTED, COMMENTED)
+- **Smoketest Results**: Trillian test results per hypervisor
+- **State Tracking**: Automatically updates when PRs are closed
+
+See [scripts/README.md](./scripts/README.md) and [scripts/QUICKSTART.md](./scripts/QUICKSTART.md) for setup instructions.
 
 ### Upgrade Tests
 
@@ -124,6 +135,12 @@ QA-Portal/
 │   ├── .env.example     # Environment template
 │   ├── .gitignore       # Git ignore rules
 │   └── tsconfig.json
+├── scripts/             # Automation scripts
+│   ├── scrape-github-prs.js  # GitHub PR scraper
+│   ├── scraper-cron.sh       # Cron job wrapper
+│   ├── setup-cron.sh         # Cron setup script
+│   ├── README.md             # Scraper documentation
+│   └── QUICKSTART.md         # Quick start guide
 └── package.json         # Root package.json
 ```
 
@@ -217,6 +234,7 @@ The application uses the following MySQL tables:
 | `DB_NAME` | Database name | cloudstack_tests | Yes |
 | `DB_USER` | Database username | results | Yes |
 | `DB_PASSWORD` | Database password | - | Yes |
+| `GITHUB_TOKEN` | GitHub API token (for scraper) | - | Recommended |
 
 ## Troubleshooting
 

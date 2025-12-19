@@ -18,6 +18,18 @@ export const api = {
     return response.data;
   },
 
+  // Get ALL open PRs (not just health check labeled)
+  getAllOpenPRs: async (): Promise<PRData[]> => {
+    const response = await axiosInstance.get(`${API_BASE_URL}/all-open-prs`);
+    return response.data;
+  },
+
+  // Get ready to merge PRs
+  getReadyToMergePRs: async (): Promise<PRData[]> => {
+    const response = await axiosInstance.get(`${API_BASE_URL}/ready-to-merge`);
+    return response.data;
+  },
+
   // Get specific PR by number
   getPR: async (prNumber: number): Promise<PRData> => {
     const response = await axiosInstance.get(`${API_BASE_URL}/pr/${prNumber}`);

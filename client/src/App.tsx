@@ -3,11 +3,12 @@ import './App.css';
 import PRCard from './components/PRCard';
 import SearchBar from './components/SearchBar';
 import UpgradeTests from './components/UpgradeTests';
+import AllPRsView from './components/AllPRsView';
 import { api } from './services/api';
 import { PRData } from './types';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'health' | 'upgrade'>('health');
+  const [activeTab, setActiveTab] = useState<'health' | 'all' | 'upgrade'>('health');
   const [healthPRs, setHealthPRs] = useState<PRData[]>([]);
   const [searchResults, setSearchResults] = useState<PRData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,6 +82,12 @@ function App() {
           Health Check Runs
         </button>
         <button
+          className={`tab-button ${activeTab === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveTab('all')}
+        >
+          📋 All Open PRs
+        </button>
+        <button
           className={`tab-button ${activeTab === 'upgrade' ? 'active' : ''}`}
           onClick={() => setActiveTab('upgrade')}
         >
@@ -144,6 +151,8 @@ function App() {
               </>
             )}
           </div>
+        ) : activeTab === 'all' ? (
+          <AllPRsView />
         ) : (
           <UpgradeTests />
         )}

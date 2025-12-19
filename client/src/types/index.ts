@@ -1,5 +1,6 @@
 export interface SmokeTestResult {
   hypervisor: string;
+  version?: string;
   passed: number;
   total: number;
   status: 'OK' | 'FAIL';
@@ -26,6 +27,8 @@ export interface PRData {
     change: number;
     url: string;
   };
+  labels?: string[];
+  assignees?: string[];
 }
 
 export interface UpgradeTestResult {

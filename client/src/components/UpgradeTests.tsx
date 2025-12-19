@@ -80,10 +80,13 @@ const UpgradeTests: React.FC = () => {
       'alma8': 'AlmaLinux 8',
       'alma9': 'AlmaLinux 9',
       'alma10': 'AlmaLinux 10',
+      'a10': 'AlmaLinux 10',
       // KVM/Debian
       'debian12': 'Debian 12',
+      'd12': 'Debian 12',
       // KVM/SUSE
       'sles15': 'SLES 15',
+      's15': 'SLES 15',
       // VMware versions
       '70u3': 'vSphere 7.0 U3',
       '80u3': 'vSphere 8.0 U3',

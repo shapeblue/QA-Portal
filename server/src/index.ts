@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
+import axios from 'axios';
 
 dotenv.config();
 
@@ -60,6 +61,7 @@ async function queryWithRetry<T = any>(
 // Types
 interface SmokeTestResult {
   hypervisor: string;
+  version?: string | null;
   passed: number;
   total: number;
   status: 'OK' | 'FAIL';
@@ -122,6 +124,7 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
       l.inserted_at
     FROM pr_health_labels l
     WHERE l.label_name = 'type:healthcheckrun'
+      AND l.pr_state = 'open'
     ORDER BY l.inserted_at DESC
   `;
   
@@ -131,13 +134,39 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
     return [];
   }
   
-  // Get all PR numbers
-  const prNumbers = rows.map(r => r.pr_number);
+  // Filter to only keep the latest entry for each unique PR number
+  const latestPRs = new Map<number, any>();
+  rows.forEach(row => {
+    if (!latestPRs.has(row.pr_number)) {
+      latestPRs.set(row.pr_number, row);
+    }
+  });
+  
+  // Further filter: For each version (e.g., "4.23"), keep only the most recent PR
+  const versionMap = new Map<string, any>();
+  Array.from(latestPRs.values()).forEach(row => {
+    // Extract version from title (e.g., "4.23", "4.22", "4.20")
+    const versionMatch = row.pr_title.match(/(\d+\.\d+)/);
+    if (versionMatch) {
+      const version = versionMatch[1];
+      const existing = versionMap.get(version);
+      // Keep the one with the later inserted_at timestamp
+      if (!existing || new Date(row.inserted_at) > new Date(existing.inserted_at)) {
+        versionMap.set(version, row);
+      }
+    } else {
+      // If no version found in title, keep it anyway
+      versionMap.set(`pr_${row.pr_number}`, row);
+    }
+  });
+  
+  // Get all PR numbers from filtered results
+  const prNumbers = Array.from(versionMap.values()).map(r => r.pr_number);
   
   // Fetch all data in bulk with IN queries
   const [allTrillianResults, allCodecovResults, allReviewResults] = await Promise.all([
     queryWithRetry<any[]>(
-      `SELECT pr_number, hypervisor, trillian_comment, trillian_created_at FROM pr_trillian_comments WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
+      `SELECT pr_number, hypervisor, version, trillian_comment, trillian_created_at, logs_url FROM pr_trillian_comments WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
       prNumbers
     ),
     queryWithRetry<any[]>(
@@ -145,7 +174,16 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
       prNumbers
     ),
     queryWithRetry<any[]>(
-      `SELECT pr_number, state FROM pr_approvals WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
+      `SELECT pa1.pr_number, pa1.approval_state as state, pa1.approval_created_at, pa1.approver_login
+       FROM pr_approvals pa1
+       INNER JOIN (
+         SELECT pr_number, approver_login, MAX(approval_created_at) as max_date
+         FROM pr_approvals
+         WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})
+         GROUP BY pr_number, approver_login
+       ) pa2 ON pa1.pr_number = pa2.pr_number 
+         AND pa1.approver_login = pa2.approver_login 
+         AND pa1.approval_created_at = pa2.max_date`,
       prNumbers
     ).catch(err => {
       console.warn('Could not fetch approvals:', err.message);
@@ -173,7 +211,8 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
     reviewsByPR.get(r.pr_number)!.push(r);
   });
   
-  const prDataPromises = rows.map(async (row) => {
+  // Use the filtered version map instead of all rows
+  const prDataPromises = Array.from(versionMap.values()).map(async (row) => {
     const trillianResults = trillianByPR.get(row.pr_number) || [];
     const codecovResults = codecovByPR.get(row.pr_number) || [];
     const reviewResults = reviewsByPR.get(row.pr_number) || [];
@@ -192,9 +231,12 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
         if (okMatch) passed = parseInt(okMatch[1]);
         if (errorMatch && okMatch) total = passed + parseInt(errorMatch[1]);
         
-        // Extract logs URL for this hypervisor
-        const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-        const logsUrl = logsMatch ? logsMatch[0] : undefined;
+        // Get logs URL from database field (preferred) or extract from comment as fallback
+        let logsUrl = tr.logs_url;
+        if (!logsUrl) {
+          const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
+          logsUrl = logsMatch ? logsMatch[0] : undefined;
+        }
         
         // Extract failed test names from markdown table format
         const failedTests: string[] = [];
@@ -255,8 +297,27 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
         
         // Only return if we found actual test results
         if (okMatch && total > 0) {
+          // Extract version from hypervisor name if not already in version field
+          let version = tr.version;
+          let hypervisor = tr.hypervisor;
+          
+          if (!version && hypervisor) {
+            // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
+            const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
+            if (hvMatch) {
+              const hvName = hvMatch[1];
+              const hvVersion = hvMatch[2];
+              // Only extract if the second part looks like a version (contains numbers)
+              if (/\d/.test(hvVersion)) {
+                hypervisor = hvName;
+                version = hvVersion;
+              }
+            }
+          }
+          
           return {
-            hypervisor: tr.hypervisor?.toUpperCase() || 'UNKNOWN',
+            hypervisor: hypervisor?.toUpperCase() || 'UNKNOWN',
+            version: version || null,
             passed,
             total,
             status: (errorMatch && parseInt(errorMatch[1]) > 0) ? 'FAIL' as const : 'OK' as const,
@@ -319,12 +380,37 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
       commented: reviewResults.filter((r: any) => r.state === 'COMMENTED').length,
     };
     
+    // Calculate latest update timestamp from all sources
+    const timestamps: Date[] = [];
+    
+    // Add initial timestamp
+    if (row.inserted_at) timestamps.push(new Date(row.inserted_at));
+    
+    // Add Trillian timestamps (skip NULLs)
+    trillianResults.forEach((tr: any) => {
+      if (tr.trillian_created_at) timestamps.push(new Date(tr.trillian_created_at));
+    });
+    
+    // Add codecov timestamp
+    if (codecovResults.length > 0 && codecovResults[0].codecov_created_at) {
+      timestamps.push(new Date(codecovResults[0].codecov_created_at));
+    }
+    
+    // Add review timestamps (skip NULLs)
+    reviewResults.forEach((r: any) => {
+      if (r.approval_created_at) timestamps.push(new Date(r.approval_created_at));
+    });
+    
+    const latestUpdate = timestamps.length > 0 
+      ? new Date(Math.max(...timestamps.map(d => d.getTime())))
+      : new Date(row.inserted_at);
+    
     return {
       number: row.pr_number,
       title: row.pr_title,
       url: `https://github.com/apache/cloudstack/pull/${row.pr_number}`,
       createdAt: row.inserted_at,
-      updatedAt: row.inserted_at,
+      updatedAt: latestUpdate.toISOString(),
       approvals,
       smokeTests,
       logsUrl,
@@ -338,7 +424,7 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
 async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
   // First check if PR has Trillian test results (this is the primary data source)
   const trillianResults = await queryWithRetry<any[]>(
-    'SELECT pr_number, pr_title, hypervisor, trillian_comment, trillian_created_at FROM pr_trillian_comments WHERE pr_number = ?',
+    'SELECT pr_number, pr_title, hypervisor, version, trillian_comment, trillian_created_at, logs_url FROM pr_trillian_comments WHERE pr_number = ?',
     [prNumber]
   );
   
@@ -349,7 +435,22 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
   // Use first result for basic PR info
   const firstResult = trillianResults[0];
   const prTitle = firstResult.pr_title || `PR #${prNumber}`;
-  const insertedAt = firstResult.trillian_created_at || new Date().toISOString();
+  
+  // Find first non-NULL timestamp for createdAt
+  let insertedAt = firstResult.trillian_created_at;
+  if (!insertedAt) {
+    // Look for first non-NULL timestamp in results
+    for (const tr of trillianResults) {
+      if (tr.trillian_created_at) {
+        insertedAt = tr.trillian_created_at;
+        break;
+      }
+    }
+  }
+  // If still null, use current time as fallback
+  if (!insertedAt) {
+    insertedAt = new Date().toISOString();
+  }
   
   // Parse smoke tests
   const smokeTests: SmokeTestResult[] = trillianResults
@@ -414,8 +515,28 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
       // Only return if we found actual test results
       if (okMatch && total > 0) {
         const hasErrors = errorMatch && parseInt(errorMatch[1]) > 0;
+        
+        // Extract version from hypervisor name if not already in version field
+        let version = tr.version;
+        let hypervisor = tr.hypervisor;
+        
+        if (!version && hypervisor) {
+          // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
+          const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
+          if (hvMatch) {
+            const hvName = hvMatch[1];
+            const hvVersion = hvMatch[2];
+            // Only extract if the second part looks like a version (contains numbers)
+            if (/\d/.test(hvVersion)) {
+              hypervisor = hvName;
+              version = hvVersion;
+            }
+          }
+        }
+        
         return {
-          hypervisor: tr.hypervisor?.toUpperCase() || 'UNKNOWN',
+          hypervisor: hypervisor?.toUpperCase() || 'UNKNOWN',
+          version: version || null,
           passed,
           total,
           status: hasErrors ? 'FAIL' as const : 'OK' as const,
@@ -442,12 +563,21 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
     [prNumber]
   );
   
-  // Get PR approvals data
+  // Get PR approvals data - get latest review per approver
   let reviewResults: any[] = [];
   try {
     reviewResults = await queryWithRetry<any[]>(
-      'SELECT state FROM pr_approvals WHERE pr_number = ?',
-      [prNumber]
+      `SELECT pa1.approval_state as state, pa1.approval_created_at, pa1.approver_login
+       FROM pr_approvals pa1
+       INNER JOIN (
+         SELECT approver_login, MAX(approval_created_at) as max_date
+         FROM pr_approvals
+         WHERE pr_number = ?
+         GROUP BY approver_login
+       ) pa2 ON pa1.approver_login = pa2.approver_login 
+         AND pa1.approval_created_at = pa2.max_date
+       WHERE pa1.pr_number = ?`,
+      [prNumber, prNumber]
     );
   } catch (err: any) {
     console.warn(`Could not fetch approvals for PR #${prNumber}:`, err.message);
@@ -489,12 +619,37 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
     commented: reviewResults.filter((r: any) => r.state === 'COMMENTED').length,
   };
   
+  // Calculate latest update timestamp from all sources
+  const timestamps: Date[] = [];
+  
+  // Add initial timestamp
+  if (insertedAt) timestamps.push(new Date(insertedAt));
+  
+  // Add Trillian timestamps (skip NULLs)
+  trillianResults.forEach((tr: any) => {
+    if (tr.trillian_created_at) timestamps.push(new Date(tr.trillian_created_at));
+  });
+  
+  // Add codecov timestamp
+  if (codecovResults.length > 0 && codecovResults[0].codecov_created_at) {
+    timestamps.push(new Date(codecovResults[0].codecov_created_at));
+  }
+  
+  // Add review timestamps (skip NULLs)
+  reviewResults.forEach((r: any) => {
+    if (r.approval_created_at) timestamps.push(new Date(r.approval_created_at));
+  });
+  
+  const latestUpdate = timestamps.length > 0 
+    ? new Date(Math.max(...timestamps.map(d => d.getTime())))
+    : new Date(insertedAt);
+  
   return {
     number: prNumber,
     title: prTitle,
     url: `https://github.com/apache/cloudstack/pull/${prNumber}`,
     createdAt: insertedAt,
-    updatedAt: insertedAt,
+    updatedAt: latestUpdate.toISOString(),
     approvals,
     smokeTests,
     logsUrl,
@@ -620,6 +775,262 @@ async function getUpgradeTestStats() {
 
 // API Routes
 
+// Get ALL open PRs (not just health check labeled ones)
+async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
+  console.log('[DEBUG] getAllOpenPRsFromDatabase called');
+  // Get all unique open PRs from multiple sources, using pr_states for accurate state
+  const allPRs = await queryWithRetry<any[]>(`
+    SELECT 
+      pr_number,
+      MAX(pr_title) as pr_title,
+      MAX(pr_state) as pr_state,
+      MAX(inserted_at) as inserted_at,
+      MAX(assignees) as assignees
+    FROM (
+      -- Get from pr_approvals (PRs with reviews)
+      SELECT DISTINCT 
+        pa.pr_number,
+        COALESCE(pa.pr_title, ps.pr_title, 'PR without title') as pr_title,
+        COALESCE(ps.pr_state, 'open') as pr_state,
+        COALESCE(phl.inserted_at, pa.approval_created_at, NOW()) as inserted_at,
+        ps.assignees
+      FROM pr_approvals pa
+      LEFT JOIN pr_states ps ON pa.pr_number = ps.pr_number
+      LEFT JOIN pr_health_labels phl ON pa.pr_number = phl.pr_number
+      WHERE COALESCE(ps.pr_state, 'open') = 'open'
+      
+      UNION
+      
+      -- Get from pr_states (all PRs we know about)
+      SELECT DISTINCT
+        ps.pr_number,
+        ps.pr_title,
+        ps.pr_state,
+        ps.last_checked as inserted_at,
+        ps.assignees
+      FROM pr_states ps
+      WHERE ps.pr_state = 'open'
+      
+      UNION
+      
+      -- Get from pr_health_labels (health check PRs)
+      SELECT DISTINCT
+        phl.pr_number,
+        phl.pr_title,
+        COALESCE(ps.pr_state, phl.pr_state, 'open') as pr_state,
+        phl.inserted_at,
+        ps.assignees
+      FROM pr_health_labels phl
+      LEFT JOIN pr_states ps ON phl.pr_number = ps.pr_number
+      WHERE COALESCE(ps.pr_state, phl.pr_state, 'open') = 'open'
+    ) AS unique_prs
+    GROUP BY pr_number
+    ORDER BY pr_number DESC
+  `);
+  
+  if (allPRs.length === 0) {
+    return [];
+  }
+
+  const prNumbers = allPRs.map(r => r.pr_number);
+  
+  // Fetch all data in bulk
+  const [allTrillianResults, allCodecovResults, allReviewResults, allLabelsResults] = await Promise.all([
+    queryWithRetry<any[]>(
+      `SELECT pr_number, hypervisor, version, trillian_comment, trillian_created_at, logs_url FROM pr_trillian_comments WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
+      prNumbers
+    ),
+    queryWithRetry<any[]>(
+      `SELECT pr_number, codecov_comment, codecov_created_at FROM pr_codecov_comments WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
+      prNumbers
+    ),
+    queryWithRetry<any[]>(
+      `SELECT pa1.pr_number, pa1.approval_state as state, pa1.approval_created_at, pa1.approver_login
+       FROM pr_approvals pa1
+       INNER JOIN (
+         SELECT pr_number, approver_login, MAX(approval_created_at) as max_date
+         FROM pr_approvals
+         WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})
+         GROUP BY pr_number, approver_login
+       ) pa2 ON pa1.pr_number = pa2.pr_number 
+         AND pa1.approver_login = pa2.approver_login 
+         AND pa1.approval_created_at = pa2.max_date`,
+      prNumbers
+    ).catch(err => {
+      console.warn('Could not fetch approvals:', err.message);
+      return [];
+    }),
+    queryWithRetry<any[]>(
+      `SELECT DISTINCT pr_number, label_name FROM pr_health_labels WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
+      prNumbers
+    ).catch(err => {
+      console.warn('Could not fetch labels:', err.message);
+      return [];
+    })
+  ]);
+
+  // Process each PR
+  const prDataPromises = allPRs.map(async row => {
+    const prNumber = row.pr_number;
+    const prTitle = row.pr_title;
+
+    // Get Trillian results for this PR
+    const trillianResults = allTrillianResults.filter((tr: any) => tr.pr_number === prNumber);
+    
+    // Parse smoke tests
+    const smokeTests: SmokeTestResult[] = trillianResults
+      .map((tr: any): SmokeTestResult | null => {
+        const comment = tr.trillian_comment || '';
+        let passed = 0;
+        let total = 0;
+        
+        const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
+        const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
+        const skippedMatch = comment.match(/(\d+)\s+did\s+not\s+run/i);
+        
+        if (okMatch) passed = parseInt(okMatch[1]);
+        if (errorMatch && okMatch) {
+          total = passed + parseInt(errorMatch[1]);
+          if (skippedMatch) {
+            total += parseInt(skippedMatch[1]);
+          }
+        } else if (okMatch && skippedMatch) {
+          total = passed + parseInt(skippedMatch[1]);
+        } else if (okMatch) {
+          total = passed;
+        }
+        
+        if (!tr.hypervisor || total === 0) return null;
+        
+        console.log(`[DEBUG getAllOpenPRs] Processing PR #${prNumber} hypervisor:`, tr.hypervisor, 'version:', tr.version, 'total:', total);
+        
+        const status = passed === total ? 'OK' : 'FAIL';
+        
+        // Get logs URL from database field (preferred) or extract from comment as fallback
+        let logsUrl = tr.logs_url;
+        if (!logsUrl) {
+          const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
+          logsUrl = logsMatch ? logsMatch[0] : undefined;
+        }
+        
+        // Extract version from hypervisor name if not already in version field
+        let version = tr.version;
+        let hypervisor = tr.hypervisor;
+        
+        if (!version && hypervisor) {
+          // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
+          const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
+          if (hvMatch) {
+            const hvName = hvMatch[1];
+            const hvVersion = hvMatch[2];
+            // Only extract if the second part looks like a version (contains numbers)
+            if (/\d/.test(hvVersion)) {
+              console.log(`[DEBUG] Extracted version from ${hypervisor}: hv=${hvName}, ver=${hvVersion}`);
+              hypervisor = hvName;
+              version = hvVersion;
+            }
+          }
+        }
+        
+        return {
+          hypervisor: hypervisor.toUpperCase(),
+          version: version || null,
+          passed,
+          total,
+          status,
+          logsUrl,
+          createdAt: tr.trillian_created_at || new Date().toISOString()
+        };
+      })
+      .filter((st): st is SmokeTestResult => st !== null);
+
+    // Get codecov for this PR
+    const codecovResults = allCodecovResults.filter((cc: any) => cc.pr_number === prNumber);
+    let codeCoverage: { percentage: number; change: number; url: string } | undefined;
+    if (codecovResults.length > 0 && codecovResults[0].codecov_comment) {
+      const codecovComment = codecovResults[0].codecov_comment || '';
+      const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
+      const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || codecovComment.match(/(\d+\.?\d*)% of diff/);
+      
+      if (coverageMatch) {
+        const percentage = parseFloat(coverageMatch[1]);
+        let change = 0;
+        if (changeMatch) {
+          const changeStr = changeMatch[1];
+          change = parseFloat(changeStr);
+        }
+        
+        codeCoverage = {
+          percentage,
+          change,
+          url: `https://github.com/apache/cloudstack/pull/${prNumber}`
+        };
+      }
+    }
+
+    // Get reviews for this PR
+    const reviewResults = allReviewResults.filter((r: any) => r.pr_number === prNumber);
+    const approvals = {
+      approved: reviewResults.filter((r: any) => r.state === 'APPROVED').length,
+      changesRequested: reviewResults.filter((r: any) => r.state === 'CHANGES_REQUESTED').length,
+      commented: reviewResults.filter((r: any) => r.state === 'COMMENTED').length,
+    };
+    
+    // Calculate latest update timestamp from all sources
+    const timestamps: Date[] = [];
+    
+    if (row.inserted_at) timestamps.push(new Date(row.inserted_at));
+    
+    trillianResults.forEach((tr: any) => {
+      if (tr.trillian_created_at) timestamps.push(new Date(tr.trillian_created_at));
+    });
+    
+    if (codecovResults.length > 0 && codecovResults[0].codecov_created_at) {
+      timestamps.push(new Date(codecovResults[0].codecov_created_at));
+    }
+    
+    reviewResults.forEach((r: any) => {
+      if (r.approval_created_at) timestamps.push(new Date(r.approval_created_at));
+    });
+    
+    const latestUpdate = timestamps.length > 0 
+      ? new Date(Math.max(...timestamps.map(d => d.getTime())))
+      : new Date(row.inserted_at);
+    
+    // Get labels for this PR
+    const labels = allLabelsResults
+      .filter((l: any) => l.pr_number === prNumber)
+      .map((l: any) => l.label_name);
+    
+    // Parse assignees from JSON string
+    let assignees: string[] = [];
+    if (row.assignees) {
+      try {
+        assignees = JSON.parse(row.assignees);
+      } catch (e) {
+        // If not valid JSON, treat as empty array
+        assignees = [];
+      }
+    }
+    
+    return {
+      number: prNumber,
+      title: prTitle,
+      url: `https://github.com/apache/cloudstack/pull/${prNumber}`,
+      createdAt: row.inserted_at,
+      updatedAt: latestUpdate.toISOString(),
+      approvals,
+      smokeTests,
+      logsUrl: undefined,
+      codeCoverage,
+      labels,
+      assignees,
+    };
+  });
+  
+  return await Promise.all(prDataPromises);
+}
+
 // Get health check PRs
 app.get('/api/health-prs', async (req: Request, res: Response) => {
   try {
@@ -628,6 +1039,54 @@ app.get('/api/health-prs', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching health PRs:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch health check PRs' });
+  }
+});
+
+// Get ALL open PRs
+app.get('/api/all-open-prs', async (req: Request, res: Response) => {
+  console.log('[DEBUG] /api/all-open-prs endpoint hit');
+  try {
+    const prData = await getAllOpenPRsFromDatabase();
+    console.log('[DEBUG] Returning', prData.length, 'PRs');
+    res.json(prData);
+  } catch (error: any) {
+    console.error('Error fetching all open PRs:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch all open PRs' });
+  }
+});
+
+// Get ready to merge PRs
+app.get('/api/ready-to-merge', async (req: Request, res: Response) => {
+  try {
+    const allPRs = await getHealthPRsFromDatabase();
+    
+    // Filter PRs that meet "ready to merge" criteria:
+    // - 2+ APPROVED reviews
+    // - 0 CHANGES_REQUESTED reviews
+    // - All smoke tests passing (or at least 1 passing if multiple)
+    const readyPRs = allPRs.filter(pr => {
+      const hasEnoughApprovals = pr.approvals.approved >= 2;
+      const hasNoRejections = pr.approvals.changesRequested === 0;
+      
+      // Check smoke tests - at least one test and all passing
+      const hasSmokeTests = pr.smokeTests.length > 0;
+      const allTestsPassing = pr.smokeTests.every(test => test.status === 'OK');
+      
+      return hasEnoughApprovals && hasNoRejections && hasSmokeTests && allTestsPassing;
+    });
+    
+    // Sort by number of approvals (descending), then by updated date
+    readyPRs.sort((a, b) => {
+      if (b.approvals.approved !== a.approvals.approved) {
+        return b.approvals.approved - a.approvals.approved;
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+    
+    res.json(readyPRs);
+  } catch (error: any) {
+    console.error('Error fetching ready to merge PRs:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch ready to merge PRs' });
   }
 });
 
@@ -689,6 +1148,55 @@ app.get('/api/pr/:number', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error fetching PR:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch PR' });
+  }
+});
+
+// Artifact download proxy endpoint
+app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response) => {
+  const { artifactId } = req.params;
+  
+  try {
+    const githubToken = process.env.GITHUB_TOKEN;
+    if (!githubToken) {
+      return res.status(500).json({ error: 'GitHub token not configured' });
+    }
+
+    // Get artifact details first
+    const artifactUrl = `https://api.github.com/repos/apache/cloudstack/actions/artifacts/${artifactId}`;
+    const artifactResponse = await axios.get(artifactUrl, {
+      headers: {
+        'Authorization': `token ${githubToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    });
+
+    const artifactName = artifactResponse.data.name || `artifact-${artifactId}`;
+
+    // Download the artifact archive
+    const downloadUrl = `https://api.github.com/repos/apache/cloudstack/actions/artifacts/${artifactId}/zip`;
+    const downloadResponse = await axios.get(downloadUrl, {
+      headers: {
+        'Authorization': `token ${githubToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+      },
+      responseType: 'stream',
+    });
+
+    // Set headers for file download
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${artifactName}.zip"`);
+
+    // Pipe the stream to response
+    downloadResponse.data.pipe(res);
+  } catch (error: any) {
+    console.error('Error downloading artifact:', error.message);
+    if (error.response?.status === 410) {
+      res.status(410).json({ error: 'Artifact has expired or been deleted' });
+    } else if (error.response?.status === 404) {
+      res.status(404).json({ error: 'Artifact not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to download artifact' });
+    }
   }
 });
 
