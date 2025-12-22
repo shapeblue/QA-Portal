@@ -234,11 +234,6 @@
   font-weight: 500;
 }
 
-.history-table tbody tr.latest::before {
-  content: '🆕';
-  position: absolute;
-  margin-left: -1.5rem;
-}
 
 .time-ago {
   color: #999;
