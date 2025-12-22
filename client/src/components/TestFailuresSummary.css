@@ -376,7 +376,12 @@
 
 .history-table tbody tr.latest {
   background: #e3f2fd;
-  border-left: 3px solid #1976d2;
+  font-weight: 500;
+}
+
+.history-table tbody tr.latest td:first-child::before {
+  content: '🆕 ';
+  font-size: 0.9rem;
 }
 
 .history-table tbody tr.latest td:first-child {
@@ -454,4 +459,13 @@
   background: #f9f9f9;
   margin-top: 0.5rem;
   border-radius: 4px;
+}
+
+/* Fix for latest row alignment */
+.history-table tbody tr.latest td {
+  padding-left: 0.75rem;
+}
+
+.history-table tbody tr.latest td:first-child {
+  padding-left: calc(0.75rem - 3px);
 }
