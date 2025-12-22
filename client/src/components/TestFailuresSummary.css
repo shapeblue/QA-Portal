@@ -461,11 +461,3 @@
   border-radius: 4px;
 }
 
-/* Fix for latest row alignment */
-.history-table tbody tr.latest td {
-  padding-left: 0.75rem;
-}
-
-.history-table tbody tr.latest td:first-child {
-  padding-left: calc(0.75rem - 3px);
-}
