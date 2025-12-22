@@ -379,10 +379,6 @@
   font-weight: 500;
 }
 
-.history-table tbody tr.latest td:first-child::before {
-  content: '🆕 ';
-  font-size: 0.9rem;
-}
 
 .history-table tbody tr.latest td:first-child {
   font-weight: 600;
