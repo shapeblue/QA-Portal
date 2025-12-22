@@ -1,0 +1,297 @@
+.test-failures-summary {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: #666;
+  margin: 0;
+}
+
+/* Statistics Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: #1976d2;
+}
+
+/* Sections */
+.failures-section {
+  margin-bottom: 3rem;
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.failures-section h2 {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.section-desc {
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+/* Tables */
+.table-container {
+  overflow-x: auto;
+}
+
+.failures-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.failures-table th {
+  background: #f5f5f5;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 2px solid #ddd;
+}
+
+.failures-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.failures-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.test-name-cell {
+  max-width: 400px;
+}
+
+.test-name-cell a {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.test-name-cell a:hover {
+  text-decoration: underline;
+}
+
+.test-file {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 0.25rem;
+}
+
+.center {
+  text-align: center;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge-amber {
+  background: #ff9800;
+  color: white;
+}
+
+.badge-red {
+  background: #f44336;
+  color: white;
+}
+
+.badge-blue {
+  background: #2196f3;
+  color: white;
+}
+
+.badge-green {
+  background: #4caf50;
+  color: white;
+}
+
+/* Hypervisor Badges */
+.hypervisors-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hv-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.platform-badge {
+  background: #e8eaf6;
+  color: #3f51b5;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.result-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.result-badge.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.result-badge.failure {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.pr-link {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.pr-link:hover {
+  text-decoration: underline;
+}
+
+/* Hypervisor Grid */
+.hypervisor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.hypervisor-card {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 2px solid #e0e0e0;
+}
+
+.hypervisor-name {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #1976d2;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.hypervisor-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hv-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 4px;
+}
+
+.hv-stat-label {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.hv-stat-value {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Loading/Error States */
+.loading,
+.error {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.error {
+  color: #c62828;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .test-failures-summary {
+    padding: 1rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  .failures-section {
+    padding: 1rem;
+  }
+
+  .failures-table {
+    font-size: 0.8rem;
+  }
+
+  .failures-table th,
+  .failures-table td {
+    padding: 0.5rem;
+  }
+
+  .hypervisor-grid {
+    grid-template-columns: 1fr;
+  }
+}
