@@ -81,9 +81,26 @@ function githubRequest(path, method = 'GET') {
 // Fetch open PRs
 async function fetchOpenPRs() {
   console.log('Fetching open PRs...');
-  const prs = await githubRequest(`/repos/${REPO_OWNER}/${REPO_NAME}/pulls?state=open&per_page=100`);
-  console.log(`Found ${prs.length} open PRs`);
-  return prs;
+  let allPRs = [];
+  let page = 1;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const prs = await githubRequest(`/repos/${REPO_OWNER}/${REPO_NAME}/pulls?state=open&per_page=100&page=${page}`);
+    allPRs = allPRs.concat(prs);
+    
+    // If we got less than 100, we're on the last page
+    if (prs.length < 100) {
+      hasMore = false;
+    } else {
+      page++;
+      // Small delay between page requests to be nice to GitHub API
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  
+  console.log(`Found ${allPRs.length} open PRs across ${page} page(s)`);
+  return allPRs;
 }
 
 // Fetch PR reviews
