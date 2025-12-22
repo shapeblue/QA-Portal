@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './TestFailuresSummary.css';
 
 interface TestFailureStats {
@@ -46,6 +47,7 @@ interface SummaryData {
 }
 
 const TestFailuresSummary: React.FC = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +135,14 @@ const TestFailuresSummary: React.FC = () => {
               {data.commonFailures.map((failure, idx) => (
                 <tr key={idx}>
                   <td className="test-name-cell">
-                    <a href={`/test-failure/${encodeURIComponent(failure.test_name)}`}>
+                    <a 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigate(`/test-failure/${encodeURIComponent(failure.test_name)}`);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
                       {failure.test_name}
                     </a>
                     <div className="test-file">{failure.test_file}</div>
@@ -185,7 +194,14 @@ const TestFailuresSummary: React.FC = () => {
                     </a>
                   </td>
                   <td className="test-name-cell">
-                    <a href={`/test-failure/${encodeURIComponent(failure.test_name)}`}>
+                    <a 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigate(`/test-failure/${encodeURIComponent(failure.test_name)}`);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
                       {failure.test_name}
                     </a>
                   </td>

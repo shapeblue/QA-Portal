@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import './App.css';
 import PRCard from './components/PRCard';
 import SearchBar from './components/SearchBar';
 import UpgradeTests from './components/UpgradeTests';
 import AllPRsView from './components/AllPRsView';
 import TestFailuresSummary from './components/TestFailuresSummary';
+import TestFailureDetail from './components/TestFailureDetail';
 import { api } from './services/api';
 import { PRData } from './types';
 
 function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'health' | 'all' | 'upgrade' | 'test-failures'>('health');
   const [healthPRs, setHealthPRs] = useState<PRData[]>([]);
   const [searchResults, setSearchResults] = useState<PRData[]>([]);
