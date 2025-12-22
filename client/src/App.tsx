@@ -5,8 +5,7 @@ import PRCard from './components/PRCard';
 import SearchBar from './components/SearchBar';
 import UpgradeTests from './components/UpgradeTests';
 import AllPRsView from './components/AllPRsView';
-import TestFailuresSummary from './components/TestFailuresSummary';
-import TestFailureDetail from './components/TestFailureDetail';
+import TestFailuresRouter from './components/TestFailuresRouter';
 import { api } from './services/api';
 import { PRData } from './types';
 
@@ -19,6 +18,19 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState(false);
+
+  // Sync activeTab with URL
+  useEffect(() => {
+    if (location.pathname.startsWith('/test-failures')) {
+      setActiveTab('test-failures');
+    } else if (location.pathname === '/all-prs') {
+      setActiveTab('all');
+    } else if (location.pathname === '/upgrade-tests') {
+      setActiveTab('upgrade');
+    } else {
+      setActiveTab('health');
+    }
+  }, [location.pathname]);
 
   // Load health PRs on mount
   useEffect(() => {
@@ -100,7 +112,10 @@ function App() {
         </button>
         <button
           className={`tab-button ${activeTab === 'test-failures' ? 'active' : ''}`}
-          onClick={() => setActiveTab('test-failures')}
+          onClick={() => {
+            setActiveTab('test-failures');
+            navigate('/test-failures');
+          }}
         >
           🧪 Test Failures
         </button>
@@ -165,7 +180,7 @@ function App() {
         ) : activeTab === 'all' ? (
           <AllPRsView />
         ) : activeTab === 'test-failures' ? (
-          <TestFailuresSummary />
+          <TestFailuresRouter />
         ) : (
           <UpgradeTests />
         )}

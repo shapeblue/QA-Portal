@@ -139,7 +139,7 @@ const TestFailuresSummary: React.FC = () => {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        navigate(`/test-failure/${encodeURIComponent(failure.test_name)}`);
+                        navigate(encodeURIComponent(failure.test_name));
                       }}
                       style={{ cursor: 'pointer' }}
                     >
@@ -198,7 +198,7 @@ const TestFailuresSummary: React.FC = () => {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        navigate(`/test-failure/${encodeURIComponent(failure.test_name)}`);
+                        navigate(encodeURIComponent(failure.test_name));
                       }}
                       style={{ cursor: 'pointer' }}
                     >
