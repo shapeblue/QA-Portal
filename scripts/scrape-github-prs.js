@@ -338,7 +338,7 @@ async function storeTestFailures(connection, prNumber, trillianComments) {
       for (const failure of failures) {
         // Check if already exists
         const [existing] = await connection.execute(
-          `SELECT id FROM test_failures 
+          `SELECT id FROM test_results 
            WHERE pr_number = ? 
              AND test_name = ? 
              AND hypervisor = ?
@@ -348,7 +348,7 @@ async function storeTestFailures(connection, prNumber, trillianComments) {
         
         if (existing.length === 0) {
           await connection.execute(
-            `INSERT INTO test_failures 
+            `INSERT INTO test_results 
              (pr_number, test_name, test_file, result, time_seconds, 
               hypervisor, hypervisor_version, test_date, logs_url)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
