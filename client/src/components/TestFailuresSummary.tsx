@@ -191,7 +191,7 @@ const TestFailuresSummary: React.FC = () => {
                   </td>
                   <td>
                     <span className="platform-badge">
-                      {failure.hypervisor?.toUpperCase()}-{failure.hypervisor_version}
+                      {failure.hypervisor?.toUpperCase() || 'N/A'}-{failure.hypervisor_version || 'N/A'}
                     </span>
                   </td>
                   <td>
@@ -223,25 +223,27 @@ const TestFailuresSummary: React.FC = () => {
         <p className="section-desc">Distribution of failures across hypervisors</p>
         
         <div className="hypervisor-grid">
-          {data.byHypervisor.map((hv, idx) => (
-            <div key={idx} className="hypervisor-card">
-              <div className="hypervisor-name">{hv.platform.toUpperCase()}</div>
-              <div className="hypervisor-stats">
-                <div className="hv-stat">
-                  <span className="hv-stat-label">Total Failures</span>
-                  <span className="hv-stat-value">{hv.failure_count}</span>
-                </div>
-                <div className="hv-stat">
-                  <span className="hv-stat-label">Unique Tests</span>
-                  <span className="hv-stat-value">{hv.unique_tests}</span>
-                </div>
-                <div className="hv-stat">
-                  <span className="hv-stat-label">PRs</span>
-                  <span className="hv-stat-value">{hv.pr_count}</span>
+          {data.byHypervisor
+            .filter(hv => hv && hv.platform) // Filter out null/undefined platforms
+            .map((hv, idx) => (
+              <div key={idx} className="hypervisor-card">
+                <div className="hypervisor-name">{hv.platform.toUpperCase()}</div>
+                <div className="hypervisor-stats">
+                  <div className="hv-stat">
+                    <span className="hv-stat-label">Total Failures</span>
+                    <span className="hv-stat-value">{hv.failure_count}</span>
+                  </div>
+                  <div className="hv-stat">
+                    <span className="hv-stat-label">Unique Tests</span>
+                    <span className="hv-stat-value">{hv.unique_tests}</span>
+                  </div>
+                  <div className="hv-stat">
+                    <span className="hv-stat-label">PRs</span>
+                    <span className="hv-stat-value">{hv.pr_count}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       </section>
     </div>
