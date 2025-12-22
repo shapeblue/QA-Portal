@@ -1243,14 +1243,15 @@ app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) 
 // Get smoke test failures summary
 app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
   try {
-    // Get statistics
+    // Get statistics (excluding Error results)
     const stats = await queryWithRetry<any[]>(
       `SELECT 
         COUNT(*) as total_failures,
         COUNT(DISTINCT test_name) as unique_tests,
         COUNT(DISTINCT pr_number) as prs_affected,
         ROUND(COUNT(*) / COUNT(DISTINCT pr_number), 2) as avg_failures_per_pr
-       FROM test_results`
+       FROM test_results
+       WHERE result != 'Error'`
     );
     
     // Get most common failures (flaky tests)
@@ -1263,12 +1264,13 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
         GROUP_CONCAT(DISTINCT hypervisor ORDER BY hypervisor) as hypervisors,
         MAX(test_date) as last_seen,
         MIN(test_date) as first_seen,
-        MAX(CASE WHEN result IN ('Error', 'Failure') THEN test_date END) as last_failure_date,
+        MAX(CASE WHEN result = 'Failure' THEN test_date END) as last_failure_date,
         MAX(CASE WHEN result = 'Success' THEN test_date END) as last_success_date,
-        MAX(CASE WHEN result IN ('Error', 'Failure') THEN pr_number END) as last_failure_pr,
+        MAX(CASE WHEN result = 'Failure' THEN pr_number END) as last_failure_pr,
         MAX(CASE WHEN result = 'Success' THEN pr_number END) as last_success_pr
        FROM test_results
        WHERE test_date >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+         AND result != 'Error'
        GROUP BY test_name, test_file
        HAVING pr_count > 2
        ORDER BY pr_count DESC, occurrence_count DESC
@@ -1286,7 +1288,7 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
       }
     }
     
-    // Get recent failures (last 7 days)
+    // Get recent failures (last 7 days) - excluding Error results
     const recentFailures = await queryWithRetry<any[]>(
       `SELECT 
         tf.id, tf.pr_number, tf.test_name, tf.test_file, tf.result,
@@ -1294,9 +1296,11 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
         (SELECT COUNT(DISTINCT pr_number) 
          FROM test_results tf2 
          WHERE tf2.test_name = tf.test_name 
-           AND tf2.pr_number != tf.pr_number) as other_pr_count
+           AND tf2.pr_number != tf.pr_number
+           AND tf2.result != 'Error') as other_pr_count
        FROM test_results tf
        WHERE tf.test_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+         AND tf.result != 'Error'
        ORDER BY tf.test_date DESC
        LIMIT 50`
     );
@@ -1306,7 +1310,7 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
       failure.is_common = failure.other_pr_count >= 2;
     }
     
-    // Get failures by hypervisor
+    // Get failures by hypervisor (excluding Error results)
     const byHypervisor = await queryWithRetry<any[]>(
       `SELECT 
         CONCAT(hypervisor, '-', hypervisor_version) as platform,
@@ -1315,6 +1319,7 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
         COUNT(DISTINCT pr_number) as pr_count
        FROM test_results
        WHERE hypervisor IS NOT NULL
+         AND result != 'Error'
        GROUP BY hypervisor, hypervisor_version
        ORDER BY failure_count DESC`
     );
