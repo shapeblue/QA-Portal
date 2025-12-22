@@ -45,7 +45,7 @@ interface TestFailureHistory {
   pr_number: number;
   test_file: string;
   result: string;
-  time_seconds: number;
+  time_seconds: number | string | null;
   hypervisor: string;
   hypervisor_version: string;
   test_date: string;
@@ -285,7 +285,7 @@ const TestFailuresSummary: React.FC = () => {
                                       </span>
                                     </td>
                                     <td className="duration">
-                                      {item.time_seconds != null && typeof item.time_seconds === 'number' ? `${item.time_seconds.toFixed(1)}s` : 'N/A'}
+                                      {item.time_seconds != null ? `${parseFloat(String(item.time_seconds)).toFixed(1)}s` : 'N/A'}
                                     </td>
                                     <td>
                                       {item.logs_url ? (
