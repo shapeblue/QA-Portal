@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './TestFailuresSummary.css';
 
 interface TestFailureStats {
@@ -39,6 +38,17 @@ interface ByHypervisor {
   pr_count: number;
 }
 
+interface TestFailureHistory {
+  pr_number: number;
+  test_file: string;
+  result: string;
+  time_seconds: number;
+  hypervisor: string;
+  hypervisor_version: string;
+  test_date: string;
+  logs_url: string;
+}
+
 interface SummaryData {
   stats: TestFailureStats;
   commonFailures: CommonFailure[];
@@ -47,10 +57,12 @@ interface SummaryData {
 }
 
 const TestFailuresSummary: React.FC = () => {
-  const navigate = useNavigate();
   const [data, setData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedTest, setExpandedTest] = useState<string | null>(null);
+  const [testHistory, setTestHistory] = useState<TestFailureHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -69,10 +81,63 @@ const TestFailuresSummary: React.FC = () => {
     }
   };
 
+  const fetchTestHistory = async (testName: string) => {
+    setLoadingHistory(true);
+    try {
+      const response = await fetch(`/api/test-failures/test/${encodeURIComponent(testName)}`);
+      if (!response.ok) throw new Error('Failed to fetch test history');
+      const json = await response.json();
+      setTestHistory(json.history || []);
+    } catch (err: any) {
+      console.error('Error fetching test history:', err);
+      setTestHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const toggleTest = async (testName: string) => {
+    if (expandedTest === testName) {
+      // Collapse
+      setExpandedTest(null);
+      setTestHistory([]);
+    } else {
+      // Expand
+      setExpandedTest(testName);
+      await fetchTestHistory(testName);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    return date.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getTimeDiff = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return `${Math.floor(diffDays / 30)} months ago`;
   };
 
   if (loading) {
@@ -114,10 +179,10 @@ const TestFailuresSummary: React.FC = () => {
         </div>
       </div>
 
-      {/* Most Common Failures (Flaky Tests) */}
+      {/* Most Common Failures */}
       <section className="failures-section">
         <h2>🔄 Most Common Failures (Likely Flaky Tests)</h2>
-        <p className="section-desc">Tests failing across multiple PRs - likely infrastructure or test issues</p>
+        <p className="section-desc">Tests failing across multiple PRs - click to see history</p>
         
         <div className="table-container">
           <table className="failures-table">
@@ -133,34 +198,115 @@ const TestFailuresSummary: React.FC = () => {
             </thead>
             <tbody>
               {data.commonFailures.map((failure, idx) => (
-                <tr key={idx}>
-                  <td className="test-name-cell">
-                    <a 
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigate(`detail/${encodeURIComponent(failure.test_name)}`);
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {failure.test_name}
-                    </a>
-                    <div className="test-file">{failure.test_file}</div>
-                  </td>
-                  <td className="center">
-                    <span className="badge badge-amber">{failure.occurrence_count}</span>
-                  </td>
-                  <td className="center">
-                    <span className="badge badge-blue">{failure.pr_count}</span>
-                  </td>
-                  <td className="hypervisors-cell">
-                    {failure.hypervisors?.split(',').map((hv: string, i: number) => (
-                      <span key={i} className="hv-badge">{hv.trim().toUpperCase()}</span>
-                    ))}
-                  </td>
-                  <td>{formatDate(failure.first_seen)}</td>
-                  <td>{formatDate(failure.last_seen)}</td>
-                </tr>
+                <React.Fragment key={idx}>
+                  <tr 
+                    className={`expandable-row ${expandedTest === failure.test_name ? 'expanded' : ''}`}
+                    onClick={() => toggleTest(failure.test_name)}
+                  >
+                    <td className="test-name-cell">
+                      <span className="expand-icon">
+                        {expandedTest === failure.test_name ? '▼' : '▶'}
+                      </span>
+                      <span className="test-name">{failure.test_name}</span>
+                      <div className="test-file">{failure.test_file}</div>
+                    </td>
+                    <td className="center">
+                      <span className="badge badge-amber">{failure.occurrence_count}</span>
+                    </td>
+                    <td className="center">
+                      <span className="badge badge-blue">{failure.pr_count}</span>
+                    </td>
+                    <td className="hypervisors-cell">
+                      {failure.hypervisors?.split(',').map((hv: string, i: number) => (
+                        <span key={i} className="hv-badge">{hv.trim().toUpperCase()}</span>
+                      ))}
+                    </td>
+                    <td>{formatDate(failure.first_seen)}</td>
+                    <td>{formatDate(failure.last_seen)}</td>
+                  </tr>
+                  
+                  {/* Expanded History */}
+                  {expandedTest === failure.test_name && (
+                    <tr className="expanded-content">
+                      <td colSpan={6}>
+                        <div className="history-details">
+                          <h3>📜 Failure History (Latest First)</h3>
+                          {loadingHistory ? (
+                            <div className="loading-history">Loading history...</div>
+                          ) : testHistory.length === 0 ? (
+                            <div className="no-history">No history available</div>
+                          ) : (
+                            <table className="history-table">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Time Ago</th>
+                                  <th>PR</th>
+                                  <th>Platform</th>
+                                  <th>Result</th>
+                                  <th>Duration</th>
+                                  <th>Logs</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {testHistory.slice(0, 10).map((item, histIdx) => (
+                                  <tr key={histIdx} className={histIdx === 0 ? 'latest' : ''}>
+                                    <td>{formatDateTime(item.test_date)}</td>
+                                    <td className="time-ago">{getTimeDiff(item.test_date)}</td>
+                                    <td>
+                                      <a 
+                                        href={`https://github.com/apache/cloudstack/pull/${item.pr_number}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="pr-link"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        #{item.pr_number}
+                                      </a>
+                                    </td>
+                                    <td>
+                                      <span className="platform-badge">
+                                        {item.hypervisor?.toUpperCase() || 'N/A'}-{item.hypervisor_version || 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span className={`result-badge ${item.result.toLowerCase()}`}>
+                                        {item.result}
+                                      </span>
+                                    </td>
+                                    <td className="duration">
+                                      {item.time_seconds ? `${item.time_seconds.toFixed(1)}s` : 'N/A'}
+                                    </td>
+                                    <td>
+                                      {item.logs_url ? (
+                                        <a 
+                                          href={item.logs_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="logs-link"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          📄 Logs
+                                        </a>
+                                      ) : (
+                                        <span className="no-logs">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {testHistory.length > 10 && (
+                            <div className="history-note">
+                              Showing latest 10 of {testHistory.length} failures
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -189,21 +335,17 @@ const TestFailuresSummary: React.FC = () => {
                 <tr key={failure.id}>
                   <td>{formatDate(failure.test_date)}</td>
                   <td>
-                    <a href={`/pr/${failure.pr_number}`} className="pr-link">
+                    <a 
+                      href={`https://github.com/apache/cloudstack/pull/${failure.pr_number}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="pr-link"
+                    >
                       #{failure.pr_number}
                     </a>
                   </td>
                   <td className="test-name-cell">
-                    <a 
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigate(`detail/${encodeURIComponent(failure.test_name)}`);
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {failure.test_name}
-                    </a>
+                    {failure.test_name}
                   </td>
                   <td>
                     <span className="platform-badge">
@@ -240,7 +382,7 @@ const TestFailuresSummary: React.FC = () => {
         
         <div className="hypervisor-grid">
           {data.byHypervisor
-            .filter(hv => hv && hv.platform) // Filter out null/undefined platforms
+            .filter(hv => hv && hv.platform)
             .map((hv, idx) => (
               <div key={idx} className="hypervisor-card">
                 <div className="hypervisor-name">{hv.platform.toUpperCase()}</div>

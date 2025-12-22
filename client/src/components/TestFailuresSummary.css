@@ -295,3 +295,163 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Expandable Row Styles */
+.expandable-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.expandable-row:hover {
+  background-color: #f5f5f5;
+}
+
+.expandable-row.expanded {
+  background-color: #e3f2fd;
+  font-weight: 500;
+}
+
+.expand-icon {
+  display: inline-block;
+  width: 20px;
+  margin-right: 8px;
+  color: #1976d2;
+  font-size: 0.9rem;
+}
+
+.test-name {
+  cursor: pointer;
+}
+
+.expanded-content td {
+  padding: 0 !important;
+  background-color: #fafafa;
+}
+
+.history-details {
+  padding: 1.5rem;
+  border-top: 2px solid #1976d2;
+}
+
+.history-details h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 1.2rem;
+}
+
+.loading-history,
+.no-history {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.history-table th {
+  background: #f5f5f5;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+}
+
+.history-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.history-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.history-table tbody tr.latest {
+  background: #e3f2fd;
+  border-left: 3px solid #1976d2;
+}
+
+.history-table tbody tr.latest td:first-child {
+  font-weight: 600;
+}
+
+.time-ago {
+  color: #999;
+  font-size: 0.8rem;
+}
+
+.pr-link {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.pr-link:hover {
+  text-decoration: underline;
+}
+
+.platform-badge {
+  background: #e8eaf6;
+  color: #3f51b5;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.result-badge {
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.result-badge.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.result-badge.failure {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.duration {
+  color: #666;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.logs-link {
+  color: #1976d2;
+  text-decoration: none;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.logs-link:hover {
+  text-decoration: underline;
+}
+
+.no-logs {
+  color: #ccc;
+}
+
+.history-note {
+  text-align: center;
+  padding: 1rem;
+  color: #666;
+  font-style: italic;
+  background: #f9f9f9;
+  margin-top: 0.5rem;
+  border-radius: 4px;
+}
