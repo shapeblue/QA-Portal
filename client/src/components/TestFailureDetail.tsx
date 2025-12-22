@@ -94,7 +94,7 @@ const TestFailureDetail: React.FC = () => {
 
   return (
     <div className="test-failure-detail">
-      <button className="back-button" onClick={() => navigate(-1)}>
+      <button className="back-button" onClick={() => navigate('/test-failures')}>
         ← Back to Test Failures
       </button>
 

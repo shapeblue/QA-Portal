@@ -6,8 +6,8 @@ import TestFailureDetail from './TestFailureDetail';
 const TestFailuresRouter: React.FC = () => {
   return (
     <Routes>
-      <Route path="/" element={<TestFailuresSummary />} />
-      <Route path="/:testName" element={<TestFailureDetail />} />
+      <Route index element={<TestFailuresSummary />} />
+      <Route path="detail/:testName" element={<TestFailureDetail />} />
     </Routes>
   );
 };
