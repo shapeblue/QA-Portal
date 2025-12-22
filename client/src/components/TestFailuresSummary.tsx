@@ -275,7 +275,7 @@ const TestFailuresSummary: React.FC = () => {
                                       </span>
                                     </td>
                                     <td className="duration">
-                                      {item.time_seconds ? `${item.time_seconds.toFixed(1)}s` : 'N/A'}
+                                      {item.time_seconds != null && typeof item.time_seconds === 'number' ? `${item.time_seconds.toFixed(1)}s` : 'N/A'}
                                     </td>
                                     <td>
                                       {item.logs_url ? (
