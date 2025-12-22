@@ -462,3 +462,27 @@
   background: #e8f5e9;
   color: #2e7d32;
 }
+
+/* Potentially Fixed Badge */
+.badge-fixed {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: #4caf50 !important;
+  color: white !important;
+  font-weight: 600;
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.badge-fixed:hover {
+  background: #388e3c !important;
+}

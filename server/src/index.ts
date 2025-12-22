@@ -1262,13 +1262,29 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
         COUNT(DISTINCT pr_number) as pr_count,
         GROUP_CONCAT(DISTINCT hypervisor ORDER BY hypervisor) as hypervisors,
         MAX(test_date) as last_seen,
-        MIN(test_date) as first_seen
+        MIN(test_date) as first_seen,
+        MAX(CASE WHEN result IN ('Error', 'Failure') THEN test_date END) as last_failure_date,
+        MAX(CASE WHEN result = 'Success' THEN test_date END) as last_success_date,
+        MAX(CASE WHEN result IN ('Error', 'Failure') THEN pr_number END) as last_failure_pr,
+        MAX(CASE WHEN result = 'Success' THEN pr_number END) as last_success_pr
        FROM test_results
+       WHERE test_date >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
        GROUP BY test_name, test_file
        HAVING pr_count > 2
        ORDER BY pr_count DESC, occurrence_count DESC
        LIMIT 20`
     );
+    
+    // Mark tests as potentially fixed if they have a recent success after last failure
+    for (const failure of commonFailures) {
+      failure.potentially_fixed = false;
+      if (failure.last_success_date && failure.last_failure_date) {
+        // Check if success is more recent than failure
+        if (failure.last_success_pr > failure.last_failure_pr) {
+          failure.potentially_fixed = true;
+        }
+      }
+    }
     
     // Get recent failures (last 7 days)
     const recentFailures = await queryWithRetry<any[]>(

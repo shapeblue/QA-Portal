@@ -16,6 +16,9 @@ interface CommonFailure {
   hypervisors: string;
   last_seen: string;
   first_seen: string;
+  potentially_fixed?: boolean;
+  last_failure_pr?: number;
+  last_success_pr?: number;
 }
 
 interface RecentFailure {
@@ -207,7 +210,14 @@ const TestFailuresSummary: React.FC = () => {
                       <span className="expand-icon">
                         {expandedTest === failure.test_name ? '▼' : '▶'}
                       </span>
-                      <span className="test-name">{failure.test_name}</span>
+                      <span className="test-name">
+                        {failure.test_name}
+                        {failure.potentially_fixed && (
+                          <span className="badge badge-success badge-fixed" title={`Passed in PR #${failure.last_success_pr} after failing in PR #${failure.last_failure_pr}`}>
+                            ✓ Potentially Fixed
+                          </span>
+                        )}
+                      </span>
                       <div className="test-file">{failure.test_file}</div>
                     </td>
                     <td className="center">
