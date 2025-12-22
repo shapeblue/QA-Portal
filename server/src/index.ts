@@ -1254,7 +1254,7 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
        WHERE result != 'Error'`
     );
     
-    // Get most common failures (flaky tests)
+    // Get most common failures (flaky tests) - using only latest result per PR
     const commonFailures = await queryWithRetry<any[]>(
       `SELECT 
         test_name,
@@ -1268,9 +1268,20 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
         MAX(CASE WHEN result = 'Success' THEN test_date END) as last_success_date,
         MAX(CASE WHEN result = 'Failure' THEN pr_number END) as last_failure_pr,
         MAX(CASE WHEN result = 'Success' THEN pr_number END) as last_success_pr
-       FROM test_results
-       WHERE test_date >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
-         AND result != 'Error'
+       FROM (
+         SELECT tr.*
+         FROM test_results tr
+         INNER JOIN (
+           SELECT pr_number, test_name, MAX(test_date) as max_date
+           FROM test_results
+           WHERE test_date >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+             AND result != 'Error'
+           GROUP BY pr_number, test_name
+         ) latest ON tr.pr_number = latest.pr_number 
+                 AND tr.test_name = latest.test_name 
+                 AND tr.test_date = latest.max_date
+         WHERE tr.result != 'Error'
+       ) as latest_results
        GROUP BY test_name, test_file
        HAVING pr_count > 2
        ORDER BY pr_count DESC, occurrence_count DESC
