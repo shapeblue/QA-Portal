@@ -86,7 +86,7 @@ function App() {
           <img src="/cloudstack-logo-color.svg" alt="Apache CloudStack" className="cloudstack-logo" />
           <div className="header-text">
             <h1>CloudStack PR Health Dashboard</h1>
-            <p className="subtitle">Monitor health checks and quality metrics for CloudStack</p>
+            <p className="subtitle">Monitor health checks and quality metrics for CloudStack [v0.1.1]</p>
           </div>
         </div>
       </header>
