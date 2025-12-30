@@ -2,6 +2,47 @@
 
 This is a web portal displaying CloudStack health checks and other quality metrics.
 
+## 🚀 Quick Start
+
+### For Contributors (Local Development)
+
+**Note:** Scraper scripts run ONLY on production. Do not run them locally.
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/shapeblue/QA-Portal.git
+cd QA-Portal
+
+# 2. Run setup script
+./scripts/setup-local.sh
+
+# 3. Configure .env with database credentials
+
+# 4. Start development (web app only)
+npm run dev
+```
+
+See [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) for detailed setup instructions.
+
+### For Deployment
+
+```bash
+# Deploy your changes to production
+./scripts/deploy.sh
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment details.
+
+## 📚 Documentation
+
+- **[Local Setup Guide](docs/LOCAL_SETUP.md)** - Set up development environment
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
+- **[Deployment Guide](DEPLOYMENT.md)** - Deploy to production
+- **[Multi-Instance Constraints](MULTI_INSTANCE_DB_CONSTRAINTS.md)** - Database constraints for multi-instance deployment
+- **[Security Guide](SECURITY.md)** - Security best practices
+- **[Flaky Tests System](FLAKY_TESTS_SUMMARY.md)** - Flaky tests feature documentation
+- **[Duplicate Prevention](DUPLICATE_PREVENTION.md)** - Database deduplication system
+
 ## Features
 
 ### CloudStack PR Health Dashboard
@@ -17,7 +58,7 @@ This is a web portal displaying CloudStack health checks and other quality metri
 - **Logs Access**: Direct links to test logs
 - **Automated Data Collection**: GitHub PR scraper runs periodically via cron job
 
-### GitHub PR Scraper (NEW)
+### GitHub PR Scraper (Production Only)
 
 The portal includes an automated scraper that collects PR data from GitHub:
 - **Code Coverage**: Codecov bot comments with coverage percentages
@@ -25,7 +66,9 @@ The portal includes an automated scraper that collects PR data from GitHub:
 - **Smoketest Results**: Trillian test results per hypervisor
 - **State Tracking**: Automatically updates when PRs are closed
 
-See [scripts/README.md](./scripts/README.md) and [scripts/QUICKSTART.md](./scripts/QUICKSTART.md) for setup instructions.
+⚠️ **Important**: Scraper scripts run ONLY on the production server. They must not be run on local development machines or multiple instances to avoid database write conflicts and data duplication.
+
+See [scripts/README.md](./scripts/README.md) for scraper documentation.
 
 ### Upgrade Tests
 

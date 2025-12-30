@@ -2,6 +2,15 @@
 
 Thank you for your interest in contributing to the CloudStack QA Portal! This document provides guidelines for contributing to the project.
 
+## ⚠️ Important: Scraper Scripts
+
+**The GitHub PR scraper scripts run ONLY on the production server.** Do not run scraper scripts locally:
+- ❌ Do NOT run `scrape-github-prs.js`
+- ❌ Do NOT set up scraper cron jobs locally
+- ❌ Do NOT run `update-pr-states.js`, `cleanup-duplicates.js`, etc.
+
+These scripts write to the database and must run on a single instance only to prevent data duplication and race conditions. Your local development environment will read data that the production scraper has already collected.
+
 ## Getting Started
 
 1. Fork the repository
@@ -13,7 +22,7 @@ Thank you for your interest in contributing to the CloudStack QA Portal! This do
 
 ## Development Setup
 
-See [README.md](README.md) for detailed setup instructions.
+See [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) for detailed setup instructions.
 
 Quick setup:
 ```bash

@@ -1200,9 +1200,288 @@ app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response
   }
 });
 
+// Get test failures for a specific PR with classification
+app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) => {
+  try {
+    const prNumber = parseInt(req.params.prNumber);
+    
+    // Get failures for this PR
+    const failures = await queryWithRetry<any[]>(
+      `SELECT 
+        id, pr_number, test_name, test_file, result, time_seconds,
+        hypervisor, hypervisor_version, test_date, logs_url
+       FROM test_results
+       WHERE pr_number = ?
+       ORDER BY test_name`,
+      [prNumber]
+    );
+    
+    // Classify each failure (common vs unique)
+    for (const failure of failures) {
+      // Count occurrences in other PRs
+      const occurrences = await queryWithRetry<any[]>(
+        `SELECT COUNT(DISTINCT pr_number) as count
+         FROM test_results
+         WHERE test_name = ?
+           AND pr_number != ?`,
+        [failure.test_name, prNumber]
+      );
+      
+      const otherPRCount = occurrences[0]?.count || 0;
+      failure.is_common = otherPRCount >= 2; // Seen in 2+ other PRs
+      failure.occurrence_count = otherPRCount + 1; // Including this PR
+      failure.severity = failure.is_common ? 'low' : 'high';
+    }
+    
+    res.json(failures);
+  } catch (error) {
+    console.error('Error fetching test failures:', error);
+    res.status(500).json({ error: 'Failed to fetch test failures' });
+  }
+});
+
+// Get smoke test failures summary
+app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
+  try {
+    // Get statistics (excluding Error results)
+    const stats = await queryWithRetry<any[]>(
+      `SELECT 
+        COUNT(*) as total_failures,
+        COUNT(DISTINCT test_name) as unique_tests,
+        COUNT(DISTINCT pr_number) as prs_affected,
+        ROUND(COUNT(*) / COUNT(DISTINCT pr_number), 2) as avg_failures_per_pr
+       FROM test_results
+       WHERE result != 'Error'`
+    );
+    
+    // Get most common failures (flaky tests) - using only latest result per PR
+    const commonFailures = await queryWithRetry<any[]>(
+      `SELECT 
+        test_name,
+        test_file,
+        COUNT(*) as occurrence_count,
+        COUNT(DISTINCT pr_number) as pr_count,
+        GROUP_CONCAT(DISTINCT hypervisor ORDER BY hypervisor) as hypervisors,
+        MAX(test_date) as last_seen,
+        MIN(test_date) as first_seen,
+        MAX(CASE WHEN result = 'Failure' THEN test_date END) as last_failure_date,
+        MAX(CASE WHEN result = 'Success' THEN test_date END) as last_success_date,
+        MAX(CASE WHEN result = 'Failure' THEN pr_number END) as last_failure_pr,
+        MAX(CASE WHEN result = 'Success' THEN pr_number END) as last_success_pr
+       FROM (
+         SELECT tr.*
+         FROM test_results tr
+         INNER JOIN (
+           SELECT pr_number, test_name, MAX(test_date) as max_date
+           FROM test_results
+           WHERE test_date >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+             AND result != 'Error'
+           GROUP BY pr_number, test_name
+         ) latest ON tr.pr_number = latest.pr_number 
+                 AND tr.test_name = latest.test_name 
+                 AND tr.test_date = latest.max_date
+         WHERE tr.result != 'Error'
+       ) as latest_results
+       GROUP BY test_name, test_file
+       HAVING pr_count > 2
+       ORDER BY pr_count DESC, occurrence_count DESC
+       LIMIT 20`
+    );
+    
+    // Mark tests as potentially fixed if they have a recent success after last failure
+    for (const failure of commonFailures) {
+      failure.potentially_fixed = false;
+      if (failure.last_success_date && failure.last_failure_date) {
+        // Check if success is more recent than failure
+        if (failure.last_success_pr > failure.last_failure_pr) {
+          failure.potentially_fixed = true;
+        }
+      }
+    }
+    
+    // Get recent failures (last 7 days) - excluding Error results
+    const recentFailures = await queryWithRetry<any[]>(
+      `SELECT 
+        tf.id, tf.pr_number, tf.test_name, tf.test_file, tf.result,
+        tf.hypervisor, tf.hypervisor_version, tf.test_date,
+        (SELECT COUNT(DISTINCT pr_number) 
+         FROM test_results tf2 
+         WHERE tf2.test_name = tf.test_name 
+           AND tf2.pr_number != tf.pr_number
+           AND tf2.result != 'Error') as other_pr_count
+       FROM test_results tf
+       WHERE tf.test_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+         AND tf.result != 'Error'
+       ORDER BY tf.test_date DESC
+       LIMIT 50`
+    );
+    
+    // Classify recent failures
+    for (const failure of recentFailures) {
+      failure.is_common = failure.other_pr_count >= 2;
+    }
+    
+    // Get failures by hypervisor (excluding Error results)
+    const byHypervisor = await queryWithRetry<any[]>(
+      `SELECT 
+        CONCAT(hypervisor, '-', hypervisor_version) as platform,
+        COUNT(*) as failure_count,
+        COUNT(DISTINCT test_name) as unique_tests,
+        COUNT(DISTINCT pr_number) as pr_count
+       FROM test_results
+       WHERE hypervisor IS NOT NULL
+         AND result != 'Error'
+       GROUP BY hypervisor, hypervisor_version
+       ORDER BY failure_count DESC`
+    );
+    
+    res.json({
+      stats: stats[0],
+      commonFailures,
+      recentFailures,
+      byHypervisor
+    });
+  } catch (error) {
+    console.error('Error fetching test failures summary:', error);
+    res.status(500).json({ error: 'Failed to fetch test failures summary' });
+  }
+});
+
+// Get failure history for a specific test
+app.get('/api/test-failures/test/:testName', async (req: Request, res: Response) => {
+  try {
+    const testName = decodeURIComponent(req.params.testName);
+    
+    // Get all occurrences
+    const history = await queryWithRetry<any[]>(
+      `SELECT 
+        pr_number, test_file, result, time_seconds,
+        hypervisor, hypervisor_version, test_date, logs_url
+       FROM test_results
+       WHERE test_name = ?
+       ORDER BY test_date DESC`,
+      [testName]
+    );
+    
+    // Get statistics
+    const stats = await queryWithRetry<any[]>(
+      `SELECT 
+        COUNT(*) as total_occurrences,
+        COUNT(DISTINCT pr_number) as prs_affected,
+        COUNT(DISTINCT CONCAT(hypervisor, '-', hypervisor_version)) as platforms,
+        MIN(test_date) as first_seen,
+        MAX(test_date) as last_seen,
+        GROUP_CONCAT(DISTINCT hypervisor ORDER BY hypervisor) as hypervisors
+       FROM test_results
+       WHERE test_name = ?`,
+      [testName]
+    );
+    
+    res.json({
+      test_name: testName,
+      stats: stats[0],
+      history
+    });
+  } catch (error) {
+    console.error('Error fetching test failure history:', error);
+    res.status(500).json({ error: 'Failed to fetch test failure history' });
+  }
+});
+
+// Get flaky tests - optimized version using summary table
+app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
+  try {
+    console.log('Fetching flaky tests from summary table...');
+    const rawData = await queryWithRetry<any[]>(
+      `SELECT 
+        test_name,
+        test_file,
+        hypervisor,
+        hypervisor_version,
+        total_runs,
+        failure_count,
+        success_count,
+        error_count,
+        last_failure_date,
+        last_success_date,
+        last_run_date,
+        pr_numbers,
+        last_failure_log_url as log_url
+       FROM flaky_tests_summary
+       WHERE failure_count > 1
+       ORDER BY failure_count DESC, last_failure_date DESC
+       LIMIT 500`
+    );
+    
+    // Group by test_file first, then by test_name
+    const groupedByFile = rawData.reduce((acc: any, row: any) => {
+      const testFile = row.test_file || 'Unknown';
+      
+      if (!acc[testFile]) {
+        acc[testFile] = {
+          test_file: testFile,
+          tests: {},
+          total_failures: 0,
+          last_failure_date: row.last_failure_date
+        };
+      }
+      
+      if (!acc[testFile].tests[row.test_name]) {
+        acc[testFile].tests[row.test_name] = {
+          test_name: row.test_name,
+          platforms: [],
+          total_failures: 0,
+          last_failure_date: row.last_failure_date,
+          pr_numbers: row.pr_numbers
+        };
+      }
+      
+      acc[testFile].tests[row.test_name].platforms.push({
+        hypervisor: row.hypervisor,
+        hypervisor_version: row.hypervisor_version,
+        total_runs: row.total_runs,
+        failure_count: row.failure_count,
+        success_count: row.success_count,
+        error_count: row.error_count,
+        log_url: row.log_url
+      });
+      
+      const failureCount = parseInt(row.failure_count);
+      acc[testFile].tests[row.test_name].total_failures += failureCount;
+      acc[testFile].total_failures += failureCount;
+      
+      // Keep the most recent failure date
+      if (row.last_failure_date && new Date(row.last_failure_date) > new Date(acc[testFile].last_failure_date)) {
+        acc[testFile].last_failure_date = row.last_failure_date;
+      }
+      
+      if (row.last_failure_date && new Date(row.last_failure_date) > new Date(acc[testFile].tests[row.test_name].last_failure_date)) {
+        acc[testFile].tests[row.test_name].last_failure_date = row.last_failure_date;
+      }
+      
+      return acc;
+    }, {});
+    
+    // Convert to array and transform tests object to array
+    const flakyTestsByFile = Object.values(groupedByFile).map((file: any) => ({
+      ...file,
+      tests: Object.values(file.tests)
+    }));
+    
+    console.log(`Fetched ${flakyTestsByFile.length} flaky test files`);
+    res.json(flakyTestsByFile);
+  } catch (error) {
+    console.error('Error fetching flaky tests:', error);
+    res.status(500).json({ error: 'Failed to fetch flaky tests' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start server

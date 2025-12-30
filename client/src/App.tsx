@@ -1,19 +1,36 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import './App.css';
 import PRCard from './components/PRCard';
 import SearchBar from './components/SearchBar';
 import UpgradeTests from './components/UpgradeTests';
 import AllPRsView from './components/AllPRsView';
+import TestFailuresRouter from './components/TestFailuresRouter';
 import { api } from './services/api';
 import { PRData } from './types';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'health' | 'all' | 'upgrade'>('health');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'health' | 'all' | 'upgrade' | 'test-failures'>('health');
   const [healthPRs, setHealthPRs] = useState<PRData[]>([]);
   const [searchResults, setSearchResults] = useState<PRData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState(false);
+
+  // Sync activeTab with URL
+  useEffect(() => {
+    if (location.pathname.startsWith('/test-failures')) {
+      setActiveTab('test-failures');
+    } else if (location.pathname === '/all-prs') {
+      setActiveTab('all');
+    } else if (location.pathname === '/upgrade-tests') {
+      setActiveTab('upgrade');
+    } else {
+      setActiveTab('health');
+    }
+  }, [location.pathname]);
 
   // Load health PRs on mount
   useEffect(() => {
@@ -93,6 +110,15 @@ function App() {
         >
           Upgrade Tests
         </button>
+        <button
+          className={`tab-button ${activeTab === 'test-failures' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('test-failures');
+            navigate('/test-failures');
+          }}
+        >
+          🧪 Flaky Tests
+        </button>
       </div>
 
       <main className="app-content">
@@ -153,6 +179,8 @@ function App() {
           </div>
         ) : activeTab === 'all' ? (
           <AllPRsView />
+        ) : activeTab === 'test-failures' ? (
+          <TestFailuresRouter />
         ) : (
           <UpgradeTests />
         )}
