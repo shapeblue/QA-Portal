@@ -166,7 +166,7 @@ sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
     # Fetch and checkout branch
     git fetch origin
     git checkout $BRANCH
-    git pull origin $BRANCH
+    git pull --rebase origin $BRANCH
     
     echo '✓ Code updated'
 "
