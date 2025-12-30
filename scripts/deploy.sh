@@ -14,7 +14,7 @@
 #   --no-restart    Don't restart services after deployment
 #
 # Requirements:
-#   - SSH access to production server
+#   - sshpass installed for password authentication
 #   - Git configured with push access
 #   - Node.js and npm installed locally
 #
@@ -35,6 +35,7 @@ PRODUCTION_PATH="/root/QA-Portal"
 SKIP_TESTS=false
 NO_RESTART=false
 BRANCH=""
+PASSWORD=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -80,6 +81,12 @@ echo ""
 echo -e "${YELLOW}Branch:${NC} $BRANCH"
 echo -e "${YELLOW}Server:${NC} $PRODUCTION_SERVER"
 echo ""
+
+# Ask for password once at the beginning
+echo -e "${YELLOW}Please enter SSH password for $PRODUCTION_SERVER:${NC}"
+read -s PASSWORD
+echo ""
+export SSHPASS="$PASSWORD"
 
 # Step 1: Check for uncommitted changes
 echo -e "${BLUE}[1/7] Checking for uncommitted changes...${NC}"
@@ -146,12 +153,12 @@ echo ""
 
 # Step 4: SSH to server and pull changes
 echo -e "${BLUE}[4/7] Pulling changes on production server...${NC}"
-ssh $PRODUCTION_SERVER << ENDSSH
+sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
     set -e
     cd $PRODUCTION_PATH
     
-    echo "Current branch: \$(git branch --show-current)"
-    echo "Pulling latest changes..."
+    echo 'Current branch: \$(git branch --show-current)'
+    echo 'Pulling latest changes...'
     
     # Stash any local changes (shouldn't be any, but just in case)
     git stash
@@ -161,8 +168,8 @@ ssh $PRODUCTION_SERVER << ENDSSH
     git checkout $BRANCH
     git pull origin $BRANCH
     
-    echo "✓ Code updated"
-ENDSSH
+    echo '✓ Code updated'
+"
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}✗ Failed to pull changes on server${NC}"
@@ -173,25 +180,25 @@ echo ""
 
 # Step 5: Install dependencies
 echo -e "${BLUE}[5/7] Installing dependencies on server...${NC}"
-ssh $PRODUCTION_SERVER << ENDSSH
+sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
     set -e
     cd $PRODUCTION_PATH
     
-    echo "Installing root dependencies..."
+    echo 'Installing root dependencies...'
     npm install --production
     
-    if [ -d "client" ]; then
-        echo "Installing client dependencies..."
+    if [ -d 'client' ]; then
+        echo 'Installing client dependencies...'
         cd client && npm install --production && cd ..
     fi
     
-    if [ -d "server" ]; then
-        echo "Installing server dependencies..."
+    if [ -d 'server' ]; then
+        echo 'Installing server dependencies...'
         cd server && npm install --production && cd ..
     fi
     
-    echo "✓ Dependencies installed"
-ENDSSH
+    echo '✓ Dependencies installed'
+"
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}✗ Failed to install dependencies${NC}"
@@ -202,29 +209,29 @@ echo ""
 
 # Step 6: Build application
 echo -e "${BLUE}[6/7] Building application on server...${NC}"
-ssh $PRODUCTION_SERVER << ENDSSH
+sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
     set -e
     cd $PRODUCTION_PATH
     
     # Build client
-    if [ -d "client" ]; then
-        echo "Building frontend..."
+    if [ -d 'client' ]; then
+        echo 'Building frontend...'
         cd client && npm run build && cd ..
     fi
     
     # Build server (TypeScript)
-    if [ -d "server" ]; then
-        echo "Compiling TypeScript..."
+    if [ -d 'server' ]; then
+        echo 'Compiling TypeScript...'
         cd server && npx tsc && cd ..
     fi
     
     # Ensure proper permissions for nginx
-    echo "Setting permissions..."
+    echo 'Setting permissions...'
     chmod 755 /root
     chmod -R 755 /root/QA-Portal/client/build
     
-    echo "✓ Build complete"
-ENDSSH
+    echo '✓ Build complete'
+"
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}✗ Build failed${NC}"
@@ -236,36 +243,36 @@ echo ""
 # Step 7: Restart services
 if [ "$NO_RESTART" = false ]; then
     echo -e "${BLUE}[7/7] Restarting services on server...${NC}"
-    ssh $PRODUCTION_SERVER << 'ENDSSH'
+    sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
         set -e
         cd /root/QA-Portal
         
         # Stop old server process
-        echo "Stopping old server process..."
-        pkill -f "node dist/index.js" || true
-        pkill -f "ts-node src/index.ts" || true
+        echo 'Stopping old server process...'
+        pkill -f 'node dist/index.js' || true
+        pkill -f 'ts-node src/index.ts' || true
         sleep 2
         
         # Start new server process
-        echo "Starting new server process..."
+        echo 'Starting new server process...'
         cd server
         nohup node dist/index.js > /tmp/qa-server.log 2>&1 &
-        SERVER_PID=$!
-        echo "Server started with PID: $SERVER_PID"
+        SERVER_PID=\$!
+        echo \"Server started with PID: \$SERVER_PID\"
         
         # Wait a moment and check if it's still running
         sleep 3
-        if ps -p $SERVER_PID > /dev/null; then
-            echo "✓ Server is running"
+        if ps -p \$SERVER_PID > /dev/null; then
+            echo '✓ Server is running'
         else
-            echo "✗ Server failed to start"
-            echo "Check logs: tail -f /tmp/qa-server.log"
+            echo '✗ Server failed to start'
+            echo 'Check logs: tail -f /tmp/qa-server.log'
             exit 1
         fi
         
         # Note: Frontend is served by the build, no restart needed
-        echo "✓ Services restarted"
-ENDSSH
+        echo '✓ Services restarted'
+    "
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}✗ Failed to restart services${NC}"
