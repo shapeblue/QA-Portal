@@ -1388,9 +1388,100 @@ app.get('/api/test-failures/test/:testName', async (req: Request, res: Response)
   }
 });
 
+// Get flaky tests - optimized version using summary table
+app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
+  try {
+    console.log('Fetching flaky tests from summary table...');
+    const rawData = await queryWithRetry<any[]>(
+      `SELECT 
+        test_name,
+        test_file,
+        hypervisor,
+        hypervisor_version,
+        total_runs,
+        failure_count,
+        success_count,
+        error_count,
+        last_failure_date,
+        last_success_date,
+        last_run_date,
+        pr_numbers,
+        last_failure_log_url as log_url
+       FROM flaky_tests_summary
+       WHERE failure_count > 1
+       ORDER BY failure_count DESC, last_failure_date DESC
+       LIMIT 500`
+    );
+    
+    // Group by test_file first, then by test_name
+    const groupedByFile = rawData.reduce((acc: any, row: any) => {
+      const testFile = row.test_file || 'Unknown';
+      
+      if (!acc[testFile]) {
+        acc[testFile] = {
+          test_file: testFile,
+          tests: {},
+          total_failures: 0,
+          last_failure_date: row.last_failure_date
+        };
+      }
+      
+      if (!acc[testFile].tests[row.test_name]) {
+        acc[testFile].tests[row.test_name] = {
+          test_name: row.test_name,
+          platforms: [],
+          total_failures: 0,
+          last_failure_date: row.last_failure_date,
+          pr_numbers: row.pr_numbers
+        };
+      }
+      
+      acc[testFile].tests[row.test_name].platforms.push({
+        hypervisor: row.hypervisor,
+        hypervisor_version: row.hypervisor_version,
+        total_runs: row.total_runs,
+        failure_count: row.failure_count,
+        success_count: row.success_count,
+        error_count: row.error_count,
+        log_url: row.log_url
+      });
+      
+      const failureCount = parseInt(row.failure_count);
+      acc[testFile].tests[row.test_name].total_failures += failureCount;
+      acc[testFile].total_failures += failureCount;
+      
+      // Keep the most recent failure date
+      if (row.last_failure_date && new Date(row.last_failure_date) > new Date(acc[testFile].last_failure_date)) {
+        acc[testFile].last_failure_date = row.last_failure_date;
+      }
+      
+      if (row.last_failure_date && new Date(row.last_failure_date) > new Date(acc[testFile].tests[row.test_name].last_failure_date)) {
+        acc[testFile].tests[row.test_name].last_failure_date = row.last_failure_date;
+      }
+      
+      return acc;
+    }, {});
+    
+    // Convert to array and transform tests object to array
+    const flakyTestsByFile = Object.values(groupedByFile).map((file: any) => ({
+      ...file,
+      tests: Object.values(file.tests)
+    }));
+    
+    console.log(`Fetched ${flakyTestsByFile.length} flaky test files`);
+    res.json(flakyTestsByFile);
+  } catch (error) {
+    console.error('Error fetching flaky tests:', error);
+    res.status(500).json({ error: 'Failed to fetch flaky tests' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start server

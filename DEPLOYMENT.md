@@ -2,6 +2,28 @@
 
 This guide covers deploying the CloudStack PR Health Dashboard to production.
 
+## ⚠️ Important: Multi-Instance Deployment
+
+When deploying multiple instances of this application:
+
+**✅ Safe to run on multiple instances:**
+- Web application (API server) - read-only operations
+- Connection pooling handles concurrent reads
+
+**⚠️ Must run on ONLY ONE instance:**
+- GitHub PR scraper (`scrape-github-prs.js`)
+- Update PR states script (`update-pr-states.js`)
+- Cleanup duplicates script (`cleanup-duplicates.js`)
+- Flaky tests summary updater (`update-flaky-tests-summary.js`)
+- All cron jobs related to scrapers
+
+**Why?** These scripts perform database writes without distributed locking. Running them on multiple instances simultaneously will cause:
+- Race conditions
+- Duplicate data entries
+- Database constraint violations
+
+See [MULTI_INSTANCE_DB_CONSTRAINTS.md](MULTI_INSTANCE_DB_CONSTRAINTS.md) for detailed technical analysis.
+
 ## Deployment Options
 
 ### Option 1: Traditional Server Deployment
@@ -229,6 +251,20 @@ Make sure to set these environment variables in production:
 
 ## Monitoring and Maintenance
 
+### Scraper Monitoring (Primary Instance Only)
+
+Monitor scraper health on the instance running cron jobs:
+```bash
+# Check scraper status
+./scripts/manage-scraper.sh status
+
+# View scraper logs
+./scripts/manage-scraper.sh logs
+
+# View cleanup logs
+tail -f /var/log/cleanup-duplicates.log
+```
+
 ### Health Checks
 
 The API provides a health check endpoint:
@@ -281,7 +317,29 @@ pm2 restart all
 
 ## Scaling
 
-For high traffic scenarios:
+### Horizontal Scaling
+
+For high traffic scenarios, you can run multiple web app instances behind a load balancer:
+
+**Architecture:**
+```
+Load Balancer
+    ├── Instance 1 (Primary): Web App + Scrapers + Cron Jobs
+    ├── Instance 2: Web App Only
+    └── Instance 3: Web App Only
+```
+
+**Setup:**
+1. Deploy web app to all instances
+2. Set up scraper cron jobs on PRIMARY instance only
+3. Configure load balancer to distribute web traffic
+4. Monitor primary instance for scraper health
+
+**Important:** Only ONE instance should run scraper scripts. Multiple instances running scrapers will cause data duplication and race conditions.
+
+### Vertical Scaling
+
+For single-instance deployments:
 - Use load balancers for multiple backend instances
 - Implement caching layers (Redis, Memcached)
 - Use a CDN for static assets

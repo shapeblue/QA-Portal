@@ -1,5 +1,17 @@
 # QA Portal Scripts Documentation
 
+## ⚠️ PRODUCTION ONLY - DO NOT RUN LOCALLY
+
+**These scripts run ONLY on the production server.** They perform database writes that must be executed by a single instance to prevent:
+- Race conditions
+- Duplicate data entries
+- Database constraint violations
+
+**For local development:**
+- ❌ Do NOT run any scraper scripts
+- ❌ Do NOT set up cron jobs for these scripts
+- ✅ Use the web application only (read-only operations)
+
 ## Overview
 
 This directory contains scripts for managing the CloudStack QA Portal's GitHub PR scraper and monitoring systems.

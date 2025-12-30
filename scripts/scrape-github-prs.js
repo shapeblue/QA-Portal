@@ -15,6 +15,10 @@
 const https = require('https');
 const mysql = require('mysql2/promise');
 const path = require('path');
+const fs = require('fs');
+const { promisify } = require('util');
+const { exec } = require('child_process');
+const execAsync = promisify(exec);
 require('dotenv').config({ path: path.join(__dirname, '../server/.env') });
 
 // Configuration
@@ -336,14 +340,16 @@ async function storeTestFailures(connection, prNumber, trillianComments) {
       const createdAt = trillian.created_at ? new Date(trillian.created_at).toISOString().slice(0, 19).replace('T', ' ') : null;
       
       for (const failure of failures) {
-        // Check if already exists
+        // Check if already exists to prevent duplicates (including test_date)
         const [existing] = await connection.execute(
           `SELECT id FROM test_results 
            WHERE pr_number = ? 
              AND test_name = ? 
-             AND hypervisor = ?
-             AND hypervisor_version = ?`,
-          [prNumber, failure.test_name, trillian.hypervisor, trillian.version]
+             AND hypervisor <=> ? 
+             AND hypervisor_version <=> ?
+             AND test_date <=> ?
+           LIMIT 1`,
+          [prNumber, failure.test_name, trillian.hypervisor, trillian.version, createdAt]
         );
         
         if (existing.length === 0) {
@@ -373,6 +379,285 @@ async function storeTestFailures(connection, prNumber, trillianComments) {
   if (totalStored > 0) {
     console.log(`  Stored ${totalStored} test failures`);
   }
+}
+
+// Download and parse Trillian test results from zip files
+async function downloadTrillianTestResults(trillianComment) {
+  if (!trillianComment || !trillianComment.logs_url) {
+    return null;
+  }
+  
+  const tmpDir = `/tmp/trillian-${Date.now()}`;
+  
+  try {
+    await execAsync(`mkdir -p ${tmpDir}`);
+    const zipPath = `${tmpDir}/results.zip`;
+    
+    console.log(`  Downloading: ${trillianComment.logs_url}`);
+    
+    // Download the zip file (it's a direct download, no auth needed)
+    await execAsync(`curl -sL "${trillianComment.logs_url}" -o "${zipPath}"`);
+    
+    // Extract zip
+    await execAsync(`cd ${tmpDir} && unzip -q -o results.zip 2>/dev/null || true`);
+    
+    // Find all results.txt files in MarvinLogs directory
+    const findResult = await execAsync(`find ${tmpDir}/MarvinLogs -type d -mindepth 1 -maxdepth 1 2>/dev/null`);
+    const testDirs = findResult.stdout.trim().split('\n').filter(f => f);
+    
+    if (testDirs.length === 0) {
+      console.log(`  No test directories found in MarvinLogs`);
+      return null;
+    }
+    
+    console.log(`  Found ${testDirs.length} test directories`);
+    const allResults = [];
+    
+    // Parse each test directory's results.txt
+    for (const testDir of testDirs) {
+      const resultsFile = `${testDir}/results.txt`;
+      if (fs.existsSync(resultsFile)) {
+        const results = await parseTestResultsTxt(resultsFile, testDir);
+        if (results && results.length > 0) {
+          allResults.push(...results);
+        }
+      }
+    }
+    
+    console.log(`  Parsed ${allResults.length} total test results`);
+    return allResults.length > 0 ? allResults : null;
+  } catch (error) {
+    console.log(`  Error downloading Trillian results: ${error.message}`);
+    return null;
+  } finally {
+    // Clean up temp directory
+    try {
+      await execAsync(`rm -rf ${tmpDir}`);
+      console.log(`  Cleaned up temp directory`);
+    } catch (err) {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+// Parse results.txt files from MarvinLogs
+async function parseTestResultsTxt(resultsFile, testDir) {
+  try {
+    const content = fs.readFileSync(resultsFile, 'utf8');
+    const testDirName = path.basename(testDir);
+    
+    // Extract test file name from directory name (e.g., test_network_X4YNJS -> test_network.py)
+    // The directory format is typically: test_name_RANDOMID
+    const match = testDirName.match(/^(.+)_[A-Z0-9]{6}$/);
+    const testFileName = match ? match[1] : testDirName;
+    
+    const results = [];
+    
+    // Parse the summary line at the end
+    // Format: "Ran X tests in Y.Zs"
+    const ranMatch = content.match(/^Ran (\d+) tests? in ([\d.]+)s/m);
+    if (!ranMatch) {
+      return [];
+    }
+    
+    const totalTests = parseInt(ranMatch[1]);
+    const totalTime = parseFloat(ranMatch[2]);
+    
+    // Parse result line
+    // OK = all passed
+    // OK (SKIP=X) = all passed, some skipped
+    // FAILED (failures=X) = some failed
+    // FAILED (errors=X) = some errored
+    // FAILED (failures=X, errors=Y) = some failed and errored
+    const okMatch = content.match(/^OK(?:\s+\(SKIP=(\d+)\))?$/m);
+    const failedMatch = content.match(/^FAILED\s+\((?:failures=(\d+))?(?:,\s*)?(?:errors=(\d+))?(?:,\s*)?(?:SKIP=(\d+))?\)/m);
+    
+    if (okMatch) {
+      // All tests passed
+      const skipCount = okMatch[1] ? parseInt(okMatch[1]) : 0;
+      const passCount = totalTests - skipCount;
+      
+      // Extract individual test names from the output
+      const testNameRegex = /^(test_\w+)\s+\([^)]+\)\s+\.\.\.\s+(SKIP|ok|OK)/gm;
+      let testMatch;
+      while ((testMatch = testNameRegex.exec(content)) !== null) {
+        const testName = testMatch[1];
+        const status = testMatch[2];
+        
+        results.push({
+          test_name: testName,
+          test_file: testFileName,
+          result: status === 'SKIP' ? 'Skip' : 'Success',
+          time_seconds: totalTests > 0 ? (totalTime / totalTests) : 0
+        });
+      }
+      
+      // If we couldn't extract individual tests, create aggregate result
+      if (results.length === 0 && passCount > 0) {
+        results.push({
+          test_name: testFileName,
+          test_file: testFileName,
+          result: 'Success',
+          time_seconds: totalTime
+        });
+      }
+      
+    } else if (failedMatch) {
+      // Extract failure/error counts
+      const failureCount = failedMatch[1] ? parseInt(failedMatch[1]) : 0;
+      const errorCount = failedMatch[2] ? parseInt(failedMatch[2]) : 0;
+      const skipCount = failedMatch[3] ? parseInt(failedMatch[3]) : 0;
+      
+      // Find failed test names using CRITICAL: FAILED pattern
+      const failedTestRegex = /CRITICAL:\s+FAILED:\s+(\w+):/g;
+      let failMatch;
+      const failedTests = [];
+      while ((failMatch = failedTestRegex.exec(content)) !== null) {
+        failedTests.push(failMatch[1]);
+      }
+      
+      // Find errored test names if any
+      const errorTestRegex = /CRITICAL:\s+ERROR:\s+(\w+):/g;
+      let errorMatch;
+      const erroredTests = [];
+      while ((errorMatch = errorTestRegex.exec(content)) !== null) {
+        erroredTests.push(errorMatch[1]);
+      }
+      
+      // Create results for failed tests
+      for (const testName of failedTests) {
+        results.push({
+          test_name: testName,
+          test_file: testFileName,
+          result: 'Failure',
+          time_seconds: totalTests > 0 ? (totalTime / totalTests) : 0
+        });
+      }
+      
+      // Create results for errored tests
+      for (const erroredTests of erroredTests) {
+        results.push({
+          test_name: testName,
+          test_file: testFileName,
+          result: 'Error',
+          time_seconds: totalTests > 0 ? (totalTime / totalTests) : 0
+        });
+      }
+      
+      // Also add passed tests
+      const passedTestRegex = /^(test_\w+)\s+\([^)]+\)\s+\.\.\.\s+ok/gm;
+      let passMatch;
+      while ((passMatch = passedTestRegex.exec(content)) !== null) {
+        const testName = passMatch[1];
+        // Only add if not already in failed/errored lists
+        if (!failedTests.includes(testName) && !erroredTests.includes(testName)) {
+          results.push({
+            test_name: testName,
+            test_file: testFileName,
+            result: 'Success',
+            time_seconds: totalTests > 0 ? (totalTime / totalTests) : 0
+          });
+        }
+      }
+      
+      // If we couldn't parse individual tests, create aggregate
+      if (results.length === 0) {
+        const avgTime = totalTests > 0 ? (totalTime / totalTests) : totalTime;
+        if (failureCount > 0) {
+          results.push({
+            test_name: testFileName,
+            test_file: testFileName,
+            result: 'Failure',
+            time_seconds: avgTime
+          });
+        }
+        if (errorCount > 0) {
+          results.push({
+            test_name: testFileName,
+            test_file: testFileName,
+            result: 'Error',
+            time_seconds: avgTime
+          });
+        }
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.log(`  Could not parse ${resultsFile}: ${error.message}`);
+    return [];
+  }
+}
+
+// Store test results from artifacts (includes Success results)
+async function storeArtifactTestResults(connection, prNumber, results, hypervisor, hypervisorVersion, testDate) {
+  let totalStored = 0;
+  
+  // Convert ISO date to MySQL datetime format
+  let mysqlDate = testDate;
+  if (testDate && testDate.includes('T')) {
+    mysqlDate = testDate.replace('T', ' ').replace('Z', '').substring(0, 19);
+  }
+  
+  for (const result of results) {
+    try {
+      // Check if this exact test result already exists
+      const [existing] = await connection.execute(
+        `SELECT id FROM test_results 
+         WHERE pr_number = ? 
+           AND test_name = ? 
+           AND test_file <=> ? 
+           AND hypervisor <=> ? 
+           AND hypervisor_version <=> ? 
+           AND test_date = ?
+         LIMIT 1`,
+        [
+          prNumber,
+          result.test_name,
+          result.test_file,
+          hypervisor,
+          hypervisorVersion,
+          mysqlDate
+        ]
+      );
+      
+      if (existing.length > 0) {
+        // Already exists, skip or update
+        await connection.execute(
+          `UPDATE test_results 
+           SET result = ?, time_seconds = ?
+           WHERE id = ?`,
+          [result.result, result.time_seconds, existing[0].id]
+        );
+      } else {
+        // Insert new record
+        await connection.execute(
+          `INSERT INTO test_results 
+           (pr_number, test_name, test_file, result, time_seconds, hypervisor, hypervisor_version, test_date, logs_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+          [
+            prNumber,
+            result.test_name,
+            result.test_file,
+            result.result,
+            result.time_seconds,
+            hypervisor,
+            hypervisorVersion,
+            mysqlDate
+          ]
+        );
+      }
+      totalStored++;
+    } catch (err) {
+      console.log(`  Warning: Could not store result for ${result.test_name}: ${err.message}`);
+    }
+  }
+  
+  if (totalStored > 0) {
+    console.log(`  Stored ${totalStored} test results (${results.filter(r => r.result === 'Success').length} Success, ${results.filter(r => r.result === 'Failure').length} Failure, ${results.filter(r => r.result === 'Error').length} Error)`);
+  }
+  
+  return totalStored;
 }
 
 // Update PR health labels
@@ -450,6 +735,25 @@ async function processPR(connection, prNumber, forceUpdate = false) {
       }
     }
     await storeTrillianComments(connection, prNumber, prTitle, trillianComments);
+    
+    // Download and parse full test results from Trillian zip files
+    for (const trillian of trillianComments) {
+      if (trillian.logs_url) {
+        console.log(`  Downloading full test results for ${trillian.hypervisor}-${trillian.version}...`);
+        const fullResults = await downloadTrillianTestResults(trillian);
+        
+        if (fullResults && fullResults.length > 0) {
+          await storeArtifactTestResults(
+            connection,
+            prNumber,
+            fullResults,
+            trillian.hypervisor,
+            trillian.version,
+            trillian.created_at
+          );
+        }
+      }
+    }
 
     console.log(`  ✓ PR #${prNumber} processed successfully`);
   } catch (error) {

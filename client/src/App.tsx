@@ -117,7 +117,7 @@ function App() {
             navigate('/test-failures');
           }}
         >
-          🧪 Test Failures
+          🧪 Flaky Tests
         </button>
       </div>
 
