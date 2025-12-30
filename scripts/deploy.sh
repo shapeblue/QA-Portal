@@ -185,16 +185,16 @@ sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
     cd $PRODUCTION_PATH
     
     echo 'Installing root dependencies...'
-    npm install --production
+    npm install
     
     if [ -d 'client' ]; then
         echo 'Installing client dependencies...'
-        cd client && npm install --production && cd ..
+        cd client && npm install && cd ..
     fi
     
     if [ -d 'server' ]; then
         echo 'Installing server dependencies...'
-        cd server && npm install --production && cd ..
+        cd server && npm install && cd ..
     fi
     
     echo '✓ Dependencies installed'
