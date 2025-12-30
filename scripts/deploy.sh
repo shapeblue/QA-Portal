@@ -218,6 +218,11 @@ ssh $PRODUCTION_SERVER << ENDSSH
         cd server && npx tsc && cd ..
     fi
     
+    # Ensure proper permissions for nginx
+    echo "Setting permissions..."
+    chmod 755 /root
+    chmod -R 755 /root/QA-Portal/client/build
+    
     echo "✓ Build complete"
 ENDSSH
 
@@ -237,13 +242,14 @@ if [ "$NO_RESTART" = false ]; then
         
         # Stop old server process
         echo "Stopping old server process..."
+        pkill -f "node dist/index.js" || true
         pkill -f "ts-node src/index.ts" || true
         sleep 2
         
         # Start new server process
         echo "Starting new server process..."
         cd server
-        nohup npm exec ts-node src/index.ts > /tmp/qa-server.log 2>&1 &
+        nohup node dist/index.js > /tmp/qa-server.log 2>&1 &
         SERVER_PID=$!
         echo "Server started with PID: $SERVER_PID"
         
