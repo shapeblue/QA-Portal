@@ -187,7 +187,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>QA Portal - Health Check Dashboard | v1.0.2</p>
+        <p>QA Portal - Health Check Dashboard | v1.0.3</p>
       </footer>
     </div>
   );
