@@ -765,17 +765,26 @@ async function processPR(connection, prNumber, forceUpdate = false) {
 async function handleClosedPRs(connection) {
   console.log('\nChecking for state changes in tracked PRs...');
 
-  // Get all PRs currently marked as 'open' in our database
-  const [openPRs] = await connection.execute(
+  // Get all PRs currently marked as 'open' in our database from both tables
+  const [healthOpenPRs] = await connection.execute(
     'SELECT DISTINCT pr_number FROM pr_health_labels WHERE pr_state = ?',
     ['open']
   );
+  
+  const [statesOpenPRs] = await connection.execute(
+    'SELECT DISTINCT pr_number FROM pr_states WHERE pr_state = ?',
+    ['open']
+  );
 
-  console.log(`Found ${openPRs.length} PRs marked as open in database`);
+  // Combine and deduplicate PR numbers
+  const allOpenPRNumbers = new Set([
+    ...healthOpenPRs.map(row => row.pr_number),
+    ...statesOpenPRs.map(row => row.pr_number)
+  ]);
 
-  for (const row of openPRs) {
-    const prNumber = row.pr_number;
-    
+  console.log(`Found ${allOpenPRNumbers.size} PRs marked as open in database`);
+
+  for (const prNumber of allOpenPRNumbers) {
     try {
       // Check actual state on GitHub
       const pr = await fetchPRDetails(prNumber);
@@ -784,6 +793,11 @@ async function handleClosedPRs(connection) {
         console.log(`  PR #${prNumber} is now closed, updating state...`);
         await connection.execute(
           'UPDATE pr_health_labels SET pr_state = ? WHERE pr_number = ?',
+          ['closed', prNumber]
+        );
+        // Also update pr_states table to keep it in sync
+        await connection.execute(
+          'UPDATE pr_states SET pr_state = ?, last_checked = NOW() WHERE pr_number = ?',
           ['closed', prNumber]
         );
       }
