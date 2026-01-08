@@ -776,13 +776,16 @@ async function handleClosedPRs(connection) {
     ['open']
   );
 
+  console.log(`  pr_health_labels: ${healthOpenPRs.length} open PRs`);
+  console.log(`  pr_states: ${statesOpenPRs.length} open PRs`);
+
   // Combine and deduplicate PR numbers
   const allOpenPRNumbers = new Set([
     ...healthOpenPRs.map(row => row.pr_number),
     ...statesOpenPRs.map(row => row.pr_number)
   ]);
 
-  console.log(`Found ${allOpenPRNumbers.size} PRs marked as open in database`);
+  console.log(`Found ${allOpenPRNumbers.size} PRs marked as open in database (combined unique)`);
 
   for (const prNumber of allOpenPRNumbers) {
     try {
