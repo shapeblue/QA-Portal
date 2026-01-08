@@ -665,10 +665,19 @@ async function updatePRHealthLabels(connection, prNumber, prTitle, labels, state
   // Delete existing labels for this PR
   await connection.execute('DELETE FROM pr_health_labels WHERE pr_number = ?', [prNumber]);
 
-  for (const label of labels) {
+  if (labels.length > 0) {
+    for (const label of labels) {
+      await connection.execute(
+        'INSERT INTO pr_health_labels (pr_number, pr_title, label_name, pr_state) VALUES (?, ?, ?, ?)',
+        [prNumber, prTitle, label.name, state]
+      );
+    }
+  } else {
+    // Insert a single row with NULL label for PRs with no labels
+    // This ensures the PR appears in queries that use pr_health_labels
     await connection.execute(
       'INSERT INTO pr_health_labels (pr_number, pr_title, label_name, pr_state) VALUES (?, ?, ?, ?)',
-      [prNumber, prTitle, label.name, state]
+      [prNumber, prTitle, null, state]
     );
   }
 
