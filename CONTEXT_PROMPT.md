@@ -193,6 +193,9 @@ When starting work, review these files for context:
 - Footer version incremented to v1.0.4
 - Deployment now properly compiles TypeScript server code
 - Created auto-context system (.copilot, .copilot-context, .github-copilot-setup.md) - 2025-12-30
+- Fixed PR count bug: Updated GitHub token and cleaned up 23 stale "open" PRs that were actually closed - 2026-01-08
+- Fixed missing PR data: Modified scraper to insert placeholder row for PRs with no labels (ensures all 227 PRs appear in queries) - 2026-01-08
+- All PR attributes (LGTMs, tests passed, needs-testing, ready-to-merge) now correctly synced from GitHub - 2026-01-08
 
 ## ⚠️ IMPORTANT: Copilot Self-Update Instructions
 
