@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# QA Portal - Quick Context Loader for GitHub Copilot
+# Usage: source .copilot-context or ./copilot-context
+
+echo "================================================"
+echo "📋 QA Portal Context - Ready to paste!"
+echo "================================================"
+echo ""
+echo "Copy and paste this to Copilot CLI:"
+echo ""
+echo "---START---"
+cat << 'EOF'
+I'm working on QA Portal (CloudStack PR Health Dashboard) at /Users/borisstoyanov/Documents/qa-portal/QA-Portal.
+
+Please read .copilot file in this directory for quick context, or CONTEXT_PROMPT.md for full details.
+
+Key info:
+- Frontend: client/src/App.tsx (React 18.2 + TypeScript)
+- Backend: server/src/index.ts (Express + MySQL2)
+- Deploy: ./scripts/deploy.sh --skip-tests
+- Production: root@10.0.113.145:/root/QA-Portal
+- Version: v1.0.4
+
+App shows CloudStack PR health checks, upgrade tests, and flaky test tracking from MySQL database.
+EOF
+echo "---END---"
+echo ""
+echo "================================================"

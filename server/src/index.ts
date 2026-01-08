@@ -1446,9 +1446,13 @@ app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
         log_url: row.log_url
       });
       
+      // Use MAX failure count instead of SUM to avoid inflated numbers
+      // (same test failing on multiple platforms shouldn't be added together)
       const failureCount = parseInt(row.failure_count);
-      acc[testFile].tests[row.test_name].total_failures += failureCount;
-      acc[testFile].total_failures += failureCount;
+      acc[testFile].tests[row.test_name].total_failures = Math.max(
+        acc[testFile].tests[row.test_name].total_failures, 
+        failureCount
+      );
       
       // Keep the most recent failure date
       if (row.last_failure_date && new Date(row.last_failure_date) > new Date(acc[testFile].last_failure_date)) {
@@ -1463,10 +1467,17 @@ app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
     }, {});
     
     // Convert to array and transform tests object to array
-    const flakyTestsByFile = Object.values(groupedByFile).map((file: any) => ({
-      ...file,
-      tests: Object.values(file.tests)
-    }));
+    // Recalculate file totals as sum of test max failures
+    const flakyTestsByFile = Object.values(groupedByFile).map((file: any) => {
+      const tests = Object.values(file.tests);
+      const total_failures = tests.reduce((sum: number, test: any) => sum + test.total_failures, 0);
+      
+      return {
+        ...file,
+        tests,
+        total_failures
+      };
+    });
     
     console.log(`Fetched ${flakyTestsByFile.length} flaky test files`);
     res.json(flakyTestsByFile);

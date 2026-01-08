@@ -162,7 +162,7 @@ const TestResults: React.FC = () => {
                       <tr>
                         <th>Test Name</th>
                         <th>Platforms</th>
-                        <th>Total Failures</th>
+                        <th title="Maximum failures across all platforms">Worst Platform Failures</th>
                         <th>Last Failure</th>
                         <th>PRs Affected</th>
                       </tr>

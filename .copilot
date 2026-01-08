@@ -1,0 +1,64 @@
+# QA Portal - Auto-Context for GitHub Copilot
+
+This is a quick context file for the QA Portal (CloudStack PR Health Dashboard).
+
+## Project: QA Portal
+Location: /Users/borisstoyanov/Documents/qa-portal/QA-Portal
+Production: root@10.0.113.145:/root/QA-Portal
+
+## Stack
+- Frontend: React 18.2 + TypeScript + React Router 6
+- Backend: Node.js/Express + TypeScript + MySQL2
+- Deployment: nginx + SSH deployment script
+
+## Structure
+- client/src/App.tsx - Main React app with tabs (Health, All PRs, Upgrade Tests, Flaky Tests)
+- server/src/index.ts - Express API with MySQL connection
+- scripts/deploy.sh - Deployment automation (--skip-tests flag available)
+
+## Features
+1. Health Check PRs - Displays [HEALTH] labeled PRs with smoke test results
+2. All Open PRs - Shows ready-to-merge PRs
+3. Upgrade Tests - Heatmap, filters, historical views
+4. Flaky Tests - Tracks recurring test failures
+
+## Database Tables
+- pr_health_labels, pr_trillian_comments, pr_codecov_comments, pr_lgtm_approvals
+- upgrade_test_results, test_failures_summary
+
+## Commands
+- npm run dev - Start both servers (frontend:3000, backend:5001)
+- npm run build - Build client + server
+- ./scripts/deploy.sh --skip-tests - Deploy to production
+
+## API Endpoints
+- /api/health-prs, /api/pr/:number, /api/all-prs
+- /api/upgrade-tests (with filters), /api/flaky-tests
+
+## Important Notes
+- Scraper scripts run ONLY on production (avoid duplicates)
+- Current version: v1.0.4 (footer)
+- TypeScript compilation requires ALL dependencies (not --production)
+- Git pull uses --rebase for divergent branches
+
+## ⚠️ CRITICAL: Keep This File Updated
+**GitHub Copilot MUST update this .copilot file after every significant change!**
+
+When making changes, always update this file with:
+- New features or components added
+- Version bumps
+- Deployment changes
+- Bug fixes or important modifications
+- New API endpoints
+- Database schema changes
+
+Add updates to "Recent Changes" section with date. This ensures context persists across sessions.
+
+## Recent Changes
+- 2026-01-01: Fixed flaky tests inflated failure counts (was summing across platforms, now shows max)
+- 2025-12-30: Created auto-context system (.copilot, .copilot-context, .github-copilot-setup.md)
+- 2025-12-30: Fixed deployment script - install all dependencies for TypeScript
+- 2025-12-30: Updated git pull to use --rebase for divergent branches
+- 2025-12-30: Footer version updated to v1.0.4
+
+See CONTEXT_PROMPT.md for full details.
