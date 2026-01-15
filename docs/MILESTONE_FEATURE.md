@@ -123,11 +123,12 @@ node scripts/backfill-milestones.js --execute --force
 
 **Features:**
 - Checks GitHub API rate limit before starting
-- Processes PRs in batches (default: 50)
+- Processes ALL open PRs (not limited to batches)
 - Validates milestone column exists
 - Dry-run mode for safety
 - Progress logging
 - Summary statistics
+- Can handle partial processing if rate limited
 
 ## Deployment
 

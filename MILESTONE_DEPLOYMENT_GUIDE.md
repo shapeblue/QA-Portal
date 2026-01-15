@@ -50,22 +50,37 @@ exit
 +----------+--------------+------+-----+---------+-------+
 ```
 
-### Phase 1: Backfill Existing PRs (10-15 minutes)
+### Phase 1: Backfill Existing PRs (20-30 minutes)
 
-**IMPORTANT:** This populates milestone data for existing open PRs.
+**IMPORTANT:** This populates milestone data for ALL existing open PRs (~220 PRs).
 
 ```bash
 # Still on production server
 cd /root/QA-Portal
 
-# First, do a DRY RUN to preview changes
+# First, do a DRY RUN to preview changes and check rate limit
 node scripts/backfill-milestones.js
 
-# Review the output. If looks good, execute for real:
+# Review the output:
+# - Shows total PRs to process (~220)
+# - Checks GitHub API rate limit (needs ~220 requests)
+# - Preview first few PRs
+
+# If looks good and you have enough rate limit, execute for real:
 node scripts/backfill-milestones.js --execute
 
-# Monitor progress - should process ~50 PRs
+# Monitor progress - will process ALL open PRs
 # Expected: Some PRs will have milestones, some won't (both are OK)
+# Time: ~220 PRs * 0.2 seconds/PR = ~44 seconds + API delays = ~5-10 minutes
+```
+
+**If you hit rate limit:**
+```bash
+# Process what you can with remaining rate limit
+node scripts/backfill-milestones.js --execute --force-partial
+
+# Then wait for rate limit reset and run again
+# Already processed PRs will be skipped automatically
 ```
 
 **Sample output:**
@@ -74,20 +89,32 @@ node scripts/backfill-milestones.js --execute
 Mode: ✍️  EXECUTE (will update database)
 Token: ✅ Set
 
-Found 50 open PRs to process
+📊 GitHub API Rate Limit:
+   Remaining: 4850 requests
+   Resets at: 1/15/2026, 1:30:00 PM
+
+Total open PRs to process: 220
+
+✅ milestone column exists in pr_states table
+
+Found 220 open PRs to process
 
 PR #12431: ✅ Found milestone: 4.20.3
 PR #12430: ⚪ No milestone
 PR #12428: ✅ Found milestone: 4.20.3
 ...
+(processes all 220 PRs)
+...
 
+============================================================
 📊 Summary:
-Total PRs processed:     50
-PRs with milestone:      15
-PRs without milestone:   35
+============================================================
+Total PRs processed:     220
+PRs with milestone:      65
+PRs without milestone:   155
 Errors:                  0
 
-✅ Updated 50 PRs in database.
+✅ Updated 220 PRs in database.
 ```
 
 ### Phase 2: Deploy Code Changes (5 minutes)

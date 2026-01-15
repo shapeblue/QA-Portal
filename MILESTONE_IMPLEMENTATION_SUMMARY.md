@@ -42,9 +42,9 @@ Successfully implemented milestone support for the "All Open PRs" page. PRs now 
 
 ### 5. **Backfill Script**
 - ✅ Created `scripts/backfill-milestones.js`
-- ✅ One-time script to populate existing PRs
+- ✅ Processes ALL open PRs (~220, not limited to 50)
 - ✅ Dry-run mode for safety
-- ✅ Batch processing with rate limit handling
+- ✅ Rate limit checking with partial processing option
 - ✅ Progress logging and summary statistics
 
 ### 6. **Documentation**
@@ -127,10 +127,10 @@ Commit 2: docs: Add comprehensive milestone feature documentation (32e49e2)
 ALTER TABLE pr_states ADD COLUMN milestone VARCHAR(100) DEFAULT NULL;
 ```
 
-**Phase 1:** Backfill Data (10-15 min)
+**Phase 1:** Backfill Data (20-30 min)
 ```bash
 node scripts/backfill-milestones.js          # Dry run first
-node scripts/backfill-milestones.js --execute # Then execute
+node scripts/backfill-milestones.js --execute # Then execute (ALL ~220 PRs)
 ```
 
 **Phase 2:** Deploy Code (5 min)

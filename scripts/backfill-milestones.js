@@ -3,12 +3,16 @@
 /**
  * Backfill Milestones Script
  * 
- * This script populates the milestone field for all existing open PRs in pr_states table.
+ * This script populates the milestone field for ALL existing open PRs in pr_states table.
  * Run this ONCE after adding the milestone column to the database.
  * 
  * Usage: 
- *   node scripts/backfill-milestones.js           # Dry run (preview only)
- *   node scripts/backfill-milestones.js --execute # Actually update database
+ *   node scripts/backfill-milestones.js                  # Dry run (preview only)
+ *   node scripts/backfill-milestones.js --execute        # Actually update database (ALL PRs)
+ *   node scripts/backfill-milestones.js --execute --force-partial  # Process what you can with remaining API rate limit
+ * 
+ * Note: Processes ALL open PRs in the database (not limited to 50).
+ *       Requires sufficient GitHub API rate limit (check with dry run first).
  */
 
 const path = require('path');
@@ -29,7 +33,6 @@ const DB_CONFIG = {
 const GITHUB_API = 'https://api.github.com';
 const REPO_OWNER = 'apache';
 const REPO_NAME = 'cloudstack';
-const BATCH_SIZE = 50;
 const DELAY_MS = 200;
 
 const DRY_RUN = !process.argv.includes('--execute');
@@ -90,10 +93,24 @@ async function main() {
     // Check rate limit first
     const rateLimitRemaining = await checkRateLimit();
     
-    if (rateLimitRemaining !== null && rateLimitRemaining < BATCH_SIZE) {
-      console.log(`\n⚠️  WARNING: Only ${rateLimitRemaining} requests remaining!`);
-      console.log(`   Wait for rate limit reset or reduce batch size.\n`);
-      process.exit(1);
+    // Get count of open PRs to check against rate limit
+    const [countResult] = await connection.query(`
+      SELECT COUNT(*) as count FROM pr_states WHERE pr_state = 'open'
+    `);
+    const totalPRs = countResult[0].count;
+    
+    console.log(`\nTotal open PRs to process: ${totalPRs}`);
+    
+    if (rateLimitRemaining !== null && rateLimitRemaining < totalPRs) {
+      console.log(`\n⚠️  WARNING: Only ${rateLimitRemaining} API requests remaining!`);
+      console.log(`   You need ${totalPRs} requests to process all PRs.`);
+      console.log(`   Either wait for rate limit reset or process in batches.\n`);
+      
+      const shouldContinue = process.argv.includes('--force-partial');
+      if (!shouldContinue) {
+        console.log(`   Run with --force-partial to process what you can (${rateLimitRemaining} PRs)`);
+        process.exit(1);
+      }
     }
 
     // Check if milestone column exists
@@ -109,14 +126,13 @@ async function main() {
     
     console.log('✅ milestone column exists in pr_states table\n');
 
-    // Get all open PRs
+    // Get all open PRs (no limit - process all)
     const [openPRs] = await connection.query(`
       SELECT pr_number, milestone 
       FROM pr_states 
       WHERE pr_state = 'open'
       ORDER BY pr_number DESC
-      LIMIT ?
-    `, [BATCH_SIZE]);
+    `);
     
     console.log(`Found ${openPRs.length} open PRs to process\n`);
     
