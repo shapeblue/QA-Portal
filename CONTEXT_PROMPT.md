@@ -188,6 +188,15 @@ When starting work, review these files for context:
 
 ## Recent Changes
 
+- Added milestone support to All Open PRs page - 2026-01-15
+  - New sortable "Milestone" column with teal gradient badges (🎯 icon)
+  - Backend: Added milestone field to PRData interface and SQL queries
+  - Frontend: Display milestone in table with sorting capability
+  - Database: New milestone VARCHAR(100) column in pr_states table
+  - Scrapers: Updated to extract pr.milestone?.title from GitHub API
+  - Scripts: Created backfill-milestones.js for existing PRs
+  - Documentation: MILESTONE_DEPLOYMENT_GUIDE.md and MILESTONE_ROLLBACK_PLAN.md
+  - Backwards compatible: Nullable column, graceful null handling
 - Fixed deployment script to install all dependencies (including devDependencies) for TypeScript compilation
 - Updated git pull to use --rebase to handle divergent branches
 - Footer version incremented to v1.0.4

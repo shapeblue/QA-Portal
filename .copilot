@@ -55,6 +55,7 @@ When making changes, always update this file with:
 Add updates to "Recent Changes" section with date. This ensures context persists across sessions.
 
 ## Recent Changes
+- 2026-01-15: **Added milestone support to All Open PRs page** - New sortable column displays PR milestones with teal badges, backfill script for existing data
 - 2026-01-01: Fixed flaky tests inflated failure counts (was summing across platforms, now shows max)
 - 2025-12-30: Created auto-context system (.copilot, .copilot-context, .github-copilot-setup.md)
 - 2025-12-30: Fixed deployment script - install all dependencies for TypeScript
