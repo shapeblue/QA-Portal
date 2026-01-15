@@ -88,6 +88,7 @@ interface PRData {
     change: number;
     url: string;
   };
+  milestone?: string | null;
 }
 
 interface UpgradeTestResult {
@@ -785,7 +786,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       MAX(pr_title) as pr_title,
       MAX(pr_state) as pr_state,
       MAX(inserted_at) as inserted_at,
-      MAX(assignees) as assignees
+      MAX(assignees) as assignees,
+      MAX(milestone) as milestone
     FROM (
       -- Get from pr_approvals (PRs with reviews)
       SELECT DISTINCT 
@@ -793,7 +795,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
         COALESCE(pa.pr_title, ps.pr_title, 'PR without title') as pr_title,
         COALESCE(ps.pr_state, 'open') as pr_state,
         COALESCE(phl.inserted_at, pa.approval_created_at, NOW()) as inserted_at,
-        ps.assignees
+        ps.assignees,
+        ps.milestone
       FROM pr_approvals pa
       LEFT JOIN pr_states ps ON pa.pr_number = ps.pr_number
       LEFT JOIN pr_health_labels phl ON pa.pr_number = phl.pr_number
@@ -807,7 +810,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
         ps.pr_title,
         ps.pr_state,
         ps.last_checked as inserted_at,
-        ps.assignees
+        ps.assignees,
+        ps.milestone
       FROM pr_states ps
       WHERE ps.pr_state = 'open'
       
@@ -819,7 +823,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
         phl.pr_title,
         COALESCE(ps.pr_state, phl.pr_state, 'open') as pr_state,
         phl.inserted_at,
-        ps.assignees
+        ps.assignees,
+        ps.milestone
       FROM pr_health_labels phl
       LEFT JOIN pr_states ps ON phl.pr_number = ps.pr_number
       WHERE COALESCE(ps.pr_state, phl.pr_state, 'open') = 'open'
@@ -1025,6 +1030,7 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       codeCoverage,
       labels,
       assignees,
+      milestone: row.milestone || null,
     };
   });
   

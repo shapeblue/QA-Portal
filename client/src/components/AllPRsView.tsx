@@ -12,7 +12,7 @@ interface PRWithStatus extends PRData {
 
 type FilterType = 'all' | 'ready' | 'has-approvals' | 'has-tests' | 'needs-testing';
 
-type SortField = 'status' | 'number' | 'assignee' | 'lgtms' | 'changes';
+type SortField = 'status' | 'number' | 'assignee' | 'lgtms' | 'changes' | 'milestone';
 type SortDirection = 'asc' | 'desc';
 
 const AllPRsView: React.FC = () => {
@@ -141,6 +141,11 @@ const AllPRsView: React.FC = () => {
         case 'changes':
           comparison = a.approvals.changesRequested - b.approvals.changesRequested;
           break;
+        case 'milestone':
+          const aMilestone = a.milestone || '';
+          const bMilestone = b.milestone || '';
+          comparison = aMilestone.localeCompare(bMilestone);
+          break;
       }
       
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -257,6 +262,9 @@ const AllPRsView: React.FC = () => {
                   <th onClick={() => handleSort('assignee')} className="sortable">
                     Assignee {sortField === 'assignee' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
+                  <th onClick={() => handleSort('milestone')} className="sortable">
+                    Milestone {sortField === 'milestone' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
                   <th onClick={() => handleSort('lgtms')} className="sortable">
                     LGTMs {sortField === 'lgtms' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
@@ -313,6 +321,15 @@ const AllPRsView: React.FC = () => {
                         </div>
                       ) : (
                         <span className="no-assignee">—</span>
+                      )}
+                    </td>
+                    <td className="milestone-cell">
+                      {pr.milestone ? (
+                        <span className="milestone-badge" title={`Milestone: ${pr.milestone}`}>
+                          🎯 {pr.milestone}
+                        </span>
+                      ) : (
+                        <span className="no-milestone">—</span>
                       )}
                     </td>
                     <td className={`approval-cell ${pr.approvals.approved >= 2 ? 'meets-criteria' : ''}`}>

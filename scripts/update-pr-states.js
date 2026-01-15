@@ -39,13 +39,15 @@ async function fetchPRState(prNumber) {
   try {
     const response = await githubApi.get(`/repos/${REPO_OWNER}/${REPO_NAME}/pulls/${prNumber}`);
     const assignees = (response.data.assignees || []).map(a => a.login);
+    const milestone = response.data.milestone?.title || null;
     return { 
       state: response.data.state, // 'open' or 'closed'
-      assignees: assignees
+      assignees: assignees,
+      milestone: milestone
     };
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      return { state: 'closed', assignees: [] }; // PR not found, likely deleted or closed
+      return { state: 'closed', assignees: [], milestone: null }; // PR not found, likely deleted or closed
     }
     if (error.response && error.response.status === 429) {
       console.error(`⚠️  Rate limit hit for PR #${prNumber}. Stop and run again later with a token.`);
@@ -127,15 +129,16 @@ async function main() {
       
       const actualState = prData.state;
       const assignees = prData.assignees;
+      const milestone = prData.milestone;
       const assigneesJson = JSON.stringify(assignees);
       
       if (actualState !== currentState) {
-        console.log(`   ✅ PR #${prNumber}: ${currentState} → ${actualState}, Assignees: ${assignees.join(', ') || 'None'}`);
+        console.log(`   ✅ PR #${prNumber}: ${currentState} → ${actualState}, Assignees: ${assignees.join(', ') || 'None'}, Milestone: ${milestone || 'None'}`);
         
         // Update state and assignees in pr_states table
         await connection.query(
-          'UPDATE pr_states SET pr_state = ?, assignees = ?, last_checked = NOW() WHERE pr_number = ?',
-          [actualState, assigneesJson, prNumber]
+          'UPDATE pr_states SET pr_state = ?, assignees = ?, milestone = ?, last_checked = NOW() WHERE pr_number = ?',
+          [actualState, assigneesJson, milestone, prNumber]
         );
         
         // Also update pr_health_labels if it exists
@@ -147,11 +150,11 @@ async function main() {
         updated++;
       } else {
         stillOpen++;
-        console.log(`   Still open, Assignees: ${assignees.join(', ') || 'None'}`);
-        // Update last_checked timestamp and assignees
+        console.log(`   Still open, Assignees: ${assignees.join(', ') || 'None'}, Milestone: ${milestone || 'None'}`);
+        // Update last_checked timestamp, assignees, and milestone
         await connection.query(
-          'UPDATE pr_states SET assignees = ?, last_checked = NOW() WHERE pr_number = ?',
-          [assigneesJson, prNumber]
+          'UPDATE pr_states SET assignees = ?, milestone = ?, last_checked = NOW() WHERE pr_number = ?',
+          [assigneesJson, milestone, prNumber]
         );
       }
       

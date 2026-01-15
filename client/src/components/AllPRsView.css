@@ -288,6 +288,38 @@
   font-size: 13px;
 }
 
+.milestone-cell {
+  text-align: center;
+  min-width: 100px;
+}
+
+.milestone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%);
+  border: 1px solid #81e6d9;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #234e52;
+  cursor: help;
+  transition: all 0.2s;
+}
+
+.milestone-badge:hover {
+  background: linear-gradient(135deg, #b2f5ea 0%, #81e6d9 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.no-milestone {
+  color: #cbd5e0;
+  font-style: italic;
+  font-size: 13px;
+}
+
 .approval-cell,
 .changes-cell,
 .tests-cell {

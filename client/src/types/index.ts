@@ -29,6 +29,7 @@ export interface PRData {
   };
   labels?: string[];
   assignees?: string[];
+  milestone?: string;
 }
 
 export interface UpgradeTestResult {
