@@ -89,6 +89,14 @@ interface PRData {
     url: string;
   };
   milestone?: string | null;
+  packageBuilds?: {
+    packages: string[];
+    slJid?: number;
+    buildUrl?: string;
+    buildStatus: string;
+    isStale: boolean;
+    buildDate: string;
+  } | null;
 }
 
 interface UpgradeTestResult {
@@ -840,7 +848,7 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
   const prNumbers = allPRs.map(r => r.pr_number);
   
   // Fetch all data in bulk
-  const [allTrillianResults, allCodecovResults, allReviewResults, allLabelsResults] = await Promise.all([
+  const [allTrillianResults, allCodecovResults, allReviewResults, allLabelsResults, allPackageBuildResults] = await Promise.all([
     queryWithRetry<any[]>(
       `SELECT pr_number, hypervisor, version, trillian_comment, trillian_created_at, logs_url FROM pr_trillian_comments WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
       prNumbers
@@ -870,6 +878,16 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       prNumbers
     ).catch(err => {
       console.warn('Could not fetch labels:', err.message);
+      return [];
+    }),
+    queryWithRetry<any[]>(
+      `SELECT pr_number, packages, sl_jid, build_url, build_status, is_stale, comment_created_at 
+       FROM pr_package_builds 
+       WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})
+       ORDER BY comment_created_at DESC`,
+      prNumbers
+    ).catch(err => {
+      console.warn('Could not fetch package builds:', err.message);
       return [];
     })
   ]);
@@ -1018,6 +1036,27 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       }
     }
     
+    // Get package builds for this PR (take only the latest)
+    const packageBuildResults = allPackageBuildResults.filter((pb: any) => pb.pr_number === prNumber);
+    let packageBuilds = null;
+    
+    if (packageBuildResults.length > 0) {
+      const latest = packageBuildResults[0]; // Already ordered by comment_created_at DESC
+      try {
+        packageBuilds = {
+          packages: JSON.parse(latest.packages || '[]'),
+          slJid: latest.sl_jid || undefined,
+          buildUrl: latest.build_url || undefined,
+          buildStatus: latest.build_status || 'success',
+          isStale: latest.is_stale === 1,
+          buildDate: latest.comment_created_at
+        };
+      } catch (e) {
+        console.warn(`Failed to parse package builds for PR #${prNumber}:`, e);
+        packageBuilds = null;
+      }
+    }
+    
     return {
       number: prNumber,
       title: prTitle,
@@ -1031,6 +1070,7 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       labels,
       assignees,
       milestone: row.milestone || null,
+      packageBuilds,
     };
   });
   
