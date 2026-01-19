@@ -342,8 +342,8 @@ const AllPRsView: React.FC = () => {
                           const isStale = pr.packageBuilds.isStale;
                           const isFresh = !hasFailed && !isStale;
                           
-                          // Determine display
-                          const icon = hasFailed ? '❌' : isStale ? '☑️' : '✅';
+                          // Determine display with package icons
+                          const icon = isStale ? '📦' : '📦';
                           const statusClass = hasFailed ? 'failed' : isStale ? 'stale' : 'fresh';
                           const statusText = hasFailed ? 'FAILED' : 
                                            isStale ? 'STALE (code changed after build)' : 
