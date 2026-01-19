@@ -1042,19 +1042,15 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
     
     if (packageBuildResults.length > 0) {
       const latest = packageBuildResults[0]; // Already ordered by comment_created_at DESC
-      try {
-        packageBuilds = {
-          packages: JSON.parse(latest.packages || '[]'),
-          slJid: latest.sl_jid || undefined,
-          buildUrl: latest.build_url || undefined,
-          buildStatus: latest.build_status || 'success',
-          isStale: latest.is_stale === 1,
-          buildDate: latest.comment_created_at
-        };
-      } catch (e) {
-        console.warn(`Failed to parse package builds for PR #${prNumber}:`, e);
-        packageBuilds = null;
-      }
+      // Note: MySQL2 automatically parses JSON columns, so latest.packages is already an array
+      packageBuilds = {
+        packages: latest.packages || [],
+        slJid: latest.sl_jid || undefined,
+        buildUrl: latest.build_url || undefined,
+        buildStatus: latest.build_status || 'success',
+        isStale: latest.is_stale === 1,
+        buildDate: latest.comment_created_at
+      };
     }
     
     return {
