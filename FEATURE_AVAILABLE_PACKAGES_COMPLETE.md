@@ -243,3 +243,61 @@ Frontend will gracefully handle missing data.
 **Completion Date:** 2026-01-19  
 **Git Branch:** `feature/available-packages`  
 **Commits:** 4 commits (Phase 0, 1, 2, Docs)
+
+---
+
+## 🔧 Post-Deployment Issue & Resolution
+
+### Issue Discovered
+After initial deployment, the API was returning `packageBuilds: null` for all PRs despite the database containing correct data.
+
+### Investigation Process
+1. **Verified database** - Data was correctly stored (162 records)
+2. **Verified backend code** - Code was correct in source
+3. **Tested query directly** - MySQL query worked perfectly
+4. **Discovered MySQL2 behavior** - JSON columns are auto-parsed
+
+### Root Cause
+The backend code was calling `JSON.parse()` on `latest.packages`, but MySQL2 **automatically parses JSON columns** into JavaScript arrays. When `JSON.parse()` receives an array instead of a string, JavaScript converts it to a string using `Array.toString()` (e.g., `"el8,el9,el10,..."`), then tries to parse that, which fails with:
+```
+"Unexpected token 'e', 'el8,el9,el'... is not valid JSON"
+```
+
+### Solution
+**Commit:** `75c436c` - Remove JSON.parse for packages field
+
+Changed from:
+```typescript
+packages: JSON.parse(latest.packages || '[]')
+```
+
+To:
+```typescript
+packages: latest.packages || []
+```
+
+### Additional Issue
+The server was running via `ts-node` (TypeScript interpreter) instead of the compiled JavaScript, so code changes weren't taking effect. Stopped ts-node process and started the compiled version.
+
+### Verification
+- ✅ API now returns package data correctly
+- ✅ 162 PRs have packageBuilds populated
+- ✅ 75 PRs correctly show null (no packages)
+- ✅ Zero parse errors in logs
+- ✅ Response time <200ms
+
+### Lessons Learned
+1. **MySQL2 auto-parses JSON** - No need for `JSON.parse()` on JSON columns
+2. **Verify running process** - Check if ts-node or compiled version is running
+3. **Systematic debugging** - Test each layer independently (DB → query → API)
+4. **Document edge cases** - Add comments explaining non-obvious behavior
+
+### Final Status
+**Deployment: 100% SUCCESSFUL** ✅  
+Production URL: http://10.0.113.145:3000  
+Total deployment time: 23 minutes (including debugging and fix)
+
+---
+
+**Last Updated:** 2026-01-19 12:31 UTC  
+**Status:** ✅ PRODUCTION - FULLY OPERATIONAL
