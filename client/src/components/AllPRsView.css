@@ -558,100 +558,43 @@
 /* Package Builds Styles */
 .packages-cell {
   text-align: center;
-  min-width: 150px;
+  min-width: 80px;
   padding: 8px;
 }
 
-.package-badges {
-  display: flex;
-  gap: 4px;
-  flex-wrap: nowrap;
-  justify-content: center;
-  align-items: center;
-}
-
-.package-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 600;
+.package-status {
+  display: inline-block;
+  font-size: 24px;
   text-decoration: none;
-  transition: all 0.2s ease;
   cursor: pointer;
-  white-space: nowrap;
+  transition: transform 0.2s ease;
+  line-height: 1;
 }
 
-/* Fresh packages - green gradient */
-.package-badge.fresh {
-  background: linear-gradient(135deg, #e6ffed 0%, #c6f6d5 100%);
-  border: 1px solid #9ae6b4;
-  color: #22543d;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+.package-status:hover {
+  transform: scale(1.2);
 }
 
-.package-badge.fresh:hover {
-  background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.package-status.fresh {
+  filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.5));
 }
 
-/* Stale packages - orange gradient */
-.package-badge.stale {
-  background: linear-gradient(135deg, #feebc8 0%, #fbd38d 100%);
-  border: 1px solid #ed8936;
-  color: #7c2d12;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+.package-status.stale {
+  filter: drop-shadow(0 0 2px rgba(234, 179, 8, 0.5));
 }
 
-.package-badge.stale:hover {
-  background: linear-gradient(135deg, #fbd38d 0%, #f6ad55 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.package-status.failed {
+  filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.5));
 }
 
-/* Failed packages - red gradient */
-.package-badge.failed {
-  background: linear-gradient(135deg, #fed7d7 0%, #fc8181 100%);
-  border: 1px solid #f56565;
-  color: #742a2a;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.package-badge.failed:hover {
-  background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* No packages */
 .no-packages {
-  color: #cbd5e0;
-  font-style: italic;
-  font-size: 13px;
-}
-
-/* Responsive design for packages */
-@media (max-width: 1200px) {
-  .packages-cell {
-    min-width: 120px;
-  }
-  
-  .package-badge {
-    font-size: 10px;
-    padding: 4px 8px;
-  }
+  color: #9ca3af;
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {
   .packages-cell {
     display: block;
     min-width: 100%;
-  }
-  
-  .package-badges {
-    justify-content: flex-start;
   }
 }

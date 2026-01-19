@@ -335,41 +335,45 @@ const AllPRsView: React.FC = () => {
                     </td>
                     <td className="packages-cell">
                       {pr.packageBuilds && pr.packageBuilds.packages.length > 0 ? (
-                        <div className="package-badges">
-                          {pr.packageBuilds.packages.map((pkg, idx) => {
-                            const isFailed = pkg.startsWith('!');
-                            const cleanPkg = isFailed ? pkg.substring(1) : pkg;
-                            const statusClass = isFailed ? 'failed' : 
-                                              pr.packageBuilds!.buildStatus === 'failed' ? 'failed' :
-                                              pr.packageBuilds!.isStale ? 'stale' : 'fresh';
-                            
-                            const buildDate = new Date(pr.packageBuilds!.buildDate).toLocaleString();
-                            const slJid = pr.packageBuilds!.slJid;
-                            const statusText = isFailed ? 'FAILED' :
-                                             pr.packageBuilds!.buildStatus === 'failed' ? 'FAILED' :
-                                             pr.packageBuilds!.isStale ? 'STALE (code changed after build)' : 'FRESH';
-                            
-                            const tooltipText = `Built: ${buildDate}\nSL-JID: ${slJid || 'N/A'}\nStatus: ${statusText}`;
-                            
-                            return (
-                              <a
-                                key={idx}
-                                href={pr.packageBuilds!.buildUrl || '#'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`package-badge ${statusClass}`}
-                                title={tooltipText}
-                                onClick={(e) => {
-                                  if (!pr.packageBuilds!.buildUrl) {
-                                    e.preventDefault();
-                                  }
-                                }}
-                              >
-                                {cleanPkg}
-                              </a>
-                            );
-                          })}
-                        </div>
+                        (() => {
+                          // Determine overall status
+                          const hasFailed = pr.packageBuilds.packages.some(pkg => pkg.startsWith('!')) || 
+                                           pr.packageBuilds.buildStatus === 'failed';
+                          const isStale = pr.packageBuilds.isStale;
+                          const isFresh = !hasFailed && !isStale;
+                          
+                          // Determine display
+                          const icon = isFresh ? '✅' : '❌';
+                          const statusClass = hasFailed ? 'failed' : isStale ? 'stale' : 'fresh';
+                          const statusText = hasFailed ? 'FAILED' : 
+                                           isStale ? 'STALE (code changed after build)' : 
+                                           'FRESH';
+                          
+                          const buildDate = new Date(pr.packageBuilds.buildDate).toLocaleString();
+                          const slJid = pr.packageBuilds.slJid;
+                          const packageList = pr.packageBuilds.packages
+                            .map(p => p.startsWith('!') ? `❌ ${p.substring(1)}` : `✅ ${p}`)
+                            .join('\n');
+                          
+                          const tooltipText = `Status: ${statusText}\nBuilt: ${buildDate}\nSL-JID: ${slJid || 'N/A'}\n\nPackages:\n${packageList}`;
+                          
+                          return (
+                            <a
+                              href={pr.packageBuilds.buildUrl || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`package-status ${statusClass}`}
+                              title={tooltipText}
+                              onClick={(e) => {
+                                if (!pr.packageBuilds!.buildUrl) {
+                                  e.preventDefault();
+                                }
+                              }}
+                            >
+                              {icon}
+                            </a>
+                          );
+                        })()
                       ) : (
                         <span className="no-packages">—</span>
                       )}
