@@ -30,6 +30,14 @@ export interface PRData {
   labels?: string[];
   assignees?: string[];
   milestone?: string;
+  packageBuilds?: {
+    packages: string[];
+    slJid?: number;
+    buildUrl?: string;
+    buildStatus: string;
+    isStale: boolean;
+    buildDate: string;
+  } | null;
 }
 
 export interface UpgradeTestResult {

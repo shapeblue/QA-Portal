@@ -554,3 +554,104 @@
     display: none;
   }
 }
+
+/* Package Builds Styles */
+.packages-cell {
+  text-align: center;
+  min-width: 150px;
+  padding: 8px;
+}
+
+.package-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+
+.package-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Fresh packages - green gradient */
+.package-badge.fresh {
+  background: linear-gradient(135deg, #e6ffed 0%, #c6f6d5 100%);
+  border: 1px solid #9ae6b4;
+  color: #22543d;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.package-badge.fresh:hover {
+  background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Stale packages - orange gradient */
+.package-badge.stale {
+  background: linear-gradient(135deg, #feebc8 0%, #fbd38d 100%);
+  border: 1px solid #ed8936;
+  color: #7c2d12;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.package-badge.stale:hover {
+  background: linear-gradient(135deg, #fbd38d 0%, #f6ad55 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Failed packages - red gradient */
+.package-badge.failed {
+  background: linear-gradient(135deg, #fed7d7 0%, #fc8181 100%);
+  border: 1px solid #f56565;
+  color: #742a2a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.package-badge.failed:hover {
+  background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* No packages */
+.no-packages {
+  color: #cbd5e0;
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* Responsive design for packages */
+@media (max-width: 1200px) {
+  .packages-cell {
+    min-width: 120px;
+  }
+  
+  .package-badge {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .packages-cell {
+    display: block;
+    min-width: 100%;
+  }
+  
+  .package-badges {
+    justify-content: flex-start;
+  }
+}

@@ -265,6 +265,7 @@ const AllPRsView: React.FC = () => {
                   <th onClick={() => handleSort('milestone')} className="sortable">
                     Milestone {sortField === 'milestone' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
+                  <th>Available Packages</th>
                   <th onClick={() => handleSort('lgtms')} className="sortable">
                     LGTMs {sortField === 'lgtms' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
@@ -330,6 +331,47 @@ const AllPRsView: React.FC = () => {
                         </span>
                       ) : (
                         <span className="no-milestone">—</span>
+                      )}
+                    </td>
+                    <td className="packages-cell">
+                      {pr.packageBuilds && pr.packageBuilds.packages.length > 0 ? (
+                        <div className="package-badges">
+                          {pr.packageBuilds.packages.map((pkg, idx) => {
+                            const isFailed = pkg.startsWith('!');
+                            const cleanPkg = isFailed ? pkg.substring(1) : pkg;
+                            const statusClass = isFailed ? 'failed' : 
+                                              pr.packageBuilds!.buildStatus === 'failed' ? 'failed' :
+                                              pr.packageBuilds!.isStale ? 'stale' : 'fresh';
+                            
+                            const buildDate = new Date(pr.packageBuilds!.buildDate).toLocaleString();
+                            const slJid = pr.packageBuilds!.slJid;
+                            const statusText = isFailed ? 'FAILED' :
+                                             pr.packageBuilds!.buildStatus === 'failed' ? 'FAILED' :
+                                             pr.packageBuilds!.isStale ? 'STALE (code changed after build)' : 'FRESH';
+                            
+                            const tooltipText = `Built: ${buildDate}\nSL-JID: ${slJid || 'N/A'}\nStatus: ${statusText}`;
+                            
+                            return (
+                              <a
+                                key={idx}
+                                href={pr.packageBuilds!.buildUrl || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`package-badge ${statusClass}`}
+                                title={tooltipText}
+                                onClick={(e) => {
+                                  if (!pr.packageBuilds!.buildUrl) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                              >
+                                📦 {cleanPkg}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="no-packages">—</span>
                       )}
                     </td>
                     <td className={`approval-cell ${pr.approvals.approved >= 2 ? 'meets-criteria' : ''}`}>
