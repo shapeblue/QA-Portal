@@ -343,7 +343,7 @@ const AllPRsView: React.FC = () => {
                           const isFresh = !hasFailed && !isStale;
                           
                           // Determine display
-                          const icon = isFresh ? '✅' : '❌';
+                          const icon = hasFailed ? '❌' : isStale ? '☑️' : '✅';
                           const statusClass = hasFailed ? 'failed' : isStale ? 'stale' : 'fresh';
                           const statusText = hasFailed ? 'FAILED' : 
                                            isStale ? 'STALE (code changed after build)' : 
