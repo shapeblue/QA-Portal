@@ -188,6 +188,22 @@ When starting work, review these files for context:
 
 ## Recent Changes
 
+- **✅ MILESTONE FEATURE DEPLOYED** - 2026-01-15
+  - Deployed to production: root@10.0.113.145:/root/QA-Portal
+  - Feature branch: feature/add-milestone-to-prs (merged to production)
+  - New sortable "Milestone" column with teal gradient badges (🎯 icon)
+  - Backend: Added milestone field to PRData interface and SQL queries
+  - Frontend: Display milestone in table with sorting capability
+  - Database: New milestone VARCHAR(100) column in pr_states table (139/226 PRs populated)
+  - Scrapers: Updated to extract pr.milestone?.title from GitHub API
+  - Scripts: Created backfill-milestones.js (processes ALL open PRs, not just 50)
+  - Documentation: MILESTONE_DEPLOYMENT_GUIDE.md, MILESTONE_ROLLBACK_PLAN.md, docs/MILESTONE_FEATURE.md
+  - Backwards compatible: Nullable column, graceful null handling
+  - **CRITICAL DEPLOYMENT FINDING:** After npm run build, must ensure OLD Node.js process is killed
+    - Symptom: API returns null for milestone despite correct code
+    - Root cause: Stale server process serving old compiled code
+    - Fix: `ps aux | grep node`, kill specific PID, restart with `nohup node server/dist/index.js`
+    - Verification: curl http://localhost:5001/api/all-open-prs | jq '.[0].milestone'
 - Fixed deployment script to install all dependencies (including devDependencies) for TypeScript compilation
 - Updated git pull to use --rebase to handle divergent branches
 - Footer version incremented to v1.0.4

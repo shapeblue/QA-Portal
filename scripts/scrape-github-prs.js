@@ -661,7 +661,7 @@ async function storeArtifactTestResults(connection, prNumber, results, hyperviso
 }
 
 // Update PR health labels
-async function updatePRHealthLabels(connection, prNumber, prTitle, labels, state, assignees = []) {
+async function updatePRHealthLabels(connection, prNumber, prTitle, labels, state, assignees = [], milestone = null) {
   // Delete existing labels for this PR
   await connection.execute('DELETE FROM pr_health_labels WHERE pr_number = ?', [prNumber]);
 
@@ -686,17 +686,18 @@ async function updatePRHealthLabels(connection, prNumber, prTitle, labels, state
 
   // Also update pr_states table for ALL PRs (not just health check labeled ones)
   await connection.execute(
-    `INSERT INTO pr_states (pr_number, pr_title, pr_state, assignees, last_checked) 
-     VALUES (?, ?, ?, ?, NOW()) 
+    `INSERT INTO pr_states (pr_number, pr_title, pr_state, assignees, milestone, last_checked) 
+     VALUES (?, ?, ?, ?, ?, NOW()) 
      ON DUPLICATE KEY UPDATE 
        pr_title = VALUES(pr_title),
        pr_state = VALUES(pr_state),
        assignees = VALUES(assignees),
+       milestone = VALUES(milestone),
        last_checked = NOW()`,
-    [prNumber, prTitle, state, assigneesJson]
+    [prNumber, prTitle, state, assigneesJson, milestone]
   );
 
-  console.log(`  Updated labels (${labels.length} labels, state: ${state}, assignees: ${assignees.length})`);
+  console.log(`  Updated labels (${labels.length} labels, state: ${state}, assignees: ${assignees.length}, milestone: ${milestone || 'none'})`);
 }
 
 // Process a single PR
@@ -709,13 +710,15 @@ async function processPR(connection, prNumber, forceUpdate = false) {
     const prTitle = pr.title;
     const prState = pr.state; // 'open' or 'closed'
     const assignees = (pr.assignees || []).map(a => a.login);
+    const milestone = pr.milestone?.title || null;
 
     console.log(`  Title: ${prTitle}`);
     console.log(`  State: ${prState}`);
     console.log(`  Assignees: ${assignees.length > 0 ? assignees.join(', ') : 'None'}`);
+    console.log(`  Milestone: ${milestone || 'None'}`);
 
     // Update PR labels and state
-    await updatePRHealthLabels(connection, prNumber, prTitle, pr.labels || [], prState, assignees);
+    await updatePRHealthLabels(connection, prNumber, prTitle, pr.labels || [], prState, assignees, milestone);
 
     // Fetch reviews
     const reviews = await fetchPRReviews(prNumber);

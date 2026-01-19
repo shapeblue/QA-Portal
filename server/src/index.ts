@@ -88,6 +88,15 @@ interface PRData {
     change: number;
     url: string;
   };
+  milestone?: string | null;
+  packageBuilds?: {
+    packages: string[];
+    slJid?: number;
+    buildUrl?: string;
+    buildStatus: string;
+    isStale: boolean;
+    buildDate: string;
+  } | null;
 }
 
 interface UpgradeTestResult {
@@ -785,7 +794,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       MAX(pr_title) as pr_title,
       MAX(pr_state) as pr_state,
       MAX(inserted_at) as inserted_at,
-      MAX(assignees) as assignees
+      MAX(assignees) as assignees,
+      MAX(milestone) as milestone
     FROM (
       -- Get from pr_approvals (PRs with reviews)
       SELECT DISTINCT 
@@ -793,7 +803,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
         COALESCE(pa.pr_title, ps.pr_title, 'PR without title') as pr_title,
         COALESCE(ps.pr_state, 'open') as pr_state,
         COALESCE(phl.inserted_at, pa.approval_created_at, NOW()) as inserted_at,
-        ps.assignees
+        ps.assignees,
+        ps.milestone
       FROM pr_approvals pa
       LEFT JOIN pr_states ps ON pa.pr_number = ps.pr_number
       LEFT JOIN pr_health_labels phl ON pa.pr_number = phl.pr_number
@@ -807,7 +818,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
         ps.pr_title,
         ps.pr_state,
         ps.last_checked as inserted_at,
-        ps.assignees
+        ps.assignees,
+        ps.milestone
       FROM pr_states ps
       WHERE ps.pr_state = 'open'
       
@@ -819,7 +831,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
         phl.pr_title,
         COALESCE(ps.pr_state, phl.pr_state, 'open') as pr_state,
         phl.inserted_at,
-        ps.assignees
+        ps.assignees,
+        ps.milestone
       FROM pr_health_labels phl
       LEFT JOIN pr_states ps ON phl.pr_number = ps.pr_number
       WHERE COALESCE(ps.pr_state, phl.pr_state, 'open') = 'open'
@@ -835,7 +848,7 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
   const prNumbers = allPRs.map(r => r.pr_number);
   
   // Fetch all data in bulk
-  const [allTrillianResults, allCodecovResults, allReviewResults, allLabelsResults] = await Promise.all([
+  const [allTrillianResults, allCodecovResults, allReviewResults, allLabelsResults, allPackageBuildResults] = await Promise.all([
     queryWithRetry<any[]>(
       `SELECT pr_number, hypervisor, version, trillian_comment, trillian_created_at, logs_url FROM pr_trillian_comments WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
       prNumbers
@@ -865,6 +878,16 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       prNumbers
     ).catch(err => {
       console.warn('Could not fetch labels:', err.message);
+      return [];
+    }),
+    queryWithRetry<any[]>(
+      `SELECT pr_number, packages, sl_jid, build_url, build_status, is_stale, comment_created_at 
+       FROM pr_package_builds 
+       WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})
+       ORDER BY comment_created_at DESC`,
+      prNumbers
+    ).catch(err => {
+      console.warn('Could not fetch package builds:', err.message);
       return [];
     })
   ]);
@@ -1013,6 +1036,23 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       }
     }
     
+    // Get package builds for this PR (take only the latest)
+    const packageBuildResults = allPackageBuildResults.filter((pb: any) => pb.pr_number === prNumber);
+    let packageBuilds = null;
+    
+    if (packageBuildResults.length > 0) {
+      const latest = packageBuildResults[0]; // Already ordered by comment_created_at DESC
+      // Note: MySQL2 automatically parses JSON columns, so latest.packages is already an array
+      packageBuilds = {
+        packages: latest.packages || [],
+        slJid: latest.sl_jid || undefined,
+        buildUrl: latest.build_url || undefined,
+        buildStatus: latest.build_status || 'success',
+        isStale: latest.is_stale === 1,
+        buildDate: latest.comment_created_at
+      };
+    }
+    
     return {
       number: prNumber,
       title: prTitle,
@@ -1025,6 +1065,8 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
       codeCoverage,
       labels,
       assignees,
+      milestone: row.milestone || null,
+      packageBuilds,
     };
   });
   

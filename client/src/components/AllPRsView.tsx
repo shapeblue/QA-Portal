@@ -12,7 +12,7 @@ interface PRWithStatus extends PRData {
 
 type FilterType = 'all' | 'ready' | 'has-approvals' | 'has-tests' | 'needs-testing';
 
-type SortField = 'status' | 'number' | 'assignee' | 'lgtms' | 'changes';
+type SortField = 'status' | 'number' | 'assignee' | 'lgtms' | 'changes' | 'milestone';
 type SortDirection = 'asc' | 'desc';
 
 const AllPRsView: React.FC = () => {
@@ -141,6 +141,11 @@ const AllPRsView: React.FC = () => {
         case 'changes':
           comparison = a.approvals.changesRequested - b.approvals.changesRequested;
           break;
+        case 'milestone':
+          const aMilestone = a.milestone || '';
+          const bMilestone = b.milestone || '';
+          comparison = aMilestone.localeCompare(bMilestone);
+          break;
       }
       
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -257,6 +262,10 @@ const AllPRsView: React.FC = () => {
                   <th onClick={() => handleSort('assignee')} className="sortable">
                     Assignee {sortField === 'assignee' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
+                  <th onClick={() => handleSort('milestone')} className="sortable">
+                    Milestone {sortField === 'milestone' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th>Available Packages</th>
                   <th onClick={() => handleSort('lgtms')} className="sortable">
                     LGTMs {sortField === 'lgtms' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
@@ -313,6 +322,60 @@ const AllPRsView: React.FC = () => {
                         </div>
                       ) : (
                         <span className="no-assignee">—</span>
+                      )}
+                    </td>
+                    <td className="milestone-cell">
+                      {pr.milestone ? (
+                        <span className="milestone-badge" title={`Milestone: ${pr.milestone}`}>
+                          🎯 {pr.milestone}
+                        </span>
+                      ) : (
+                        <span className="no-milestone">—</span>
+                      )}
+                    </td>
+                    <td className="packages-cell">
+                      {pr.packageBuilds && pr.packageBuilds.packages.length > 0 ? (
+                        (() => {
+                          // Determine overall status
+                          const hasFailed = pr.packageBuilds.packages.some(pkg => pkg.startsWith('!')) || 
+                                           pr.packageBuilds.buildStatus === 'failed';
+                          const isStale = pr.packageBuilds.isStale;
+                          const isFresh = !hasFailed && !isStale;
+                          
+                          // Determine display
+                          const icon = hasFailed ? '❌' : isStale ? '☑️' : '✅';
+                          const statusClass = hasFailed ? 'failed' : isStale ? 'stale' : 'fresh';
+                          const statusText = hasFailed ? 'FAILED' : 
+                                           isStale ? 'STALE (code changed after build)' : 
+                                           'FRESH';
+                          
+                          const buildDate = new Date(pr.packageBuilds.buildDate).toLocaleString();
+                          const slJid = pr.packageBuilds.slJid;
+                          const packageList = pr.packageBuilds.packages
+                            .map(p => p.startsWith('!') ? `❌ ${p.substring(1)}` : `✅ ${p}`)
+                            .join('\n');
+                          
+                          const tooltipText = `Status: ${statusText}\nBuilt: ${buildDate}\nSL-JID: ${slJid || 'N/A'}\n\nPackages:\n${packageList}`;
+                          
+                          return (
+                            <a
+                              href={pr.packageBuilds.buildUrl || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`package-status ${statusClass}`}
+                              title={tooltipText}
+                              onClick={(e) => {
+                                if (!pr.packageBuilds!.buildUrl) {
+                                  e.preventDefault();
+                                }
+                              }}
+                            >
+                              {icon}
+                            </a>
+                          );
+                        })()
+                      ) : (
+                        <span className="no-packages">—</span>
                       )}
                     </td>
                     <td className={`approval-cell ${pr.approvals.approved >= 2 ? 'meets-criteria' : ''}`}>
