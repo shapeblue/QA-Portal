@@ -359,16 +359,11 @@ const AllPRsView: React.FC = () => {
                           
                           return (
                             <a
-                              href={pr.packageBuilds.buildUrl || '#'}
+                              href={`http://10.0.3.130/cloudstack/pr/apache-cloudstack/${pr.number}/`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className={`package-status ${statusClass}`}
                               title={tooltipText}
-                              onClick={(e) => {
-                                if (!pr.packageBuilds!.buildUrl) {
-                                  e.preventDefault();
-                                }
-                              }}
                             >
                               {icon}
                             </a>
