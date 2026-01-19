@@ -576,11 +576,11 @@
 }
 
 .package-status.fresh {
-  filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.5));
+  filter: drop-shadow(0 0 3px rgba(34, 197, 94, 0.6)) hue-rotate(-30deg) saturate(1.5);
 }
 
 .package-status.stale {
-  filter: grayscale(100%) opacity(0.5);
+  filter: grayscale(100%) opacity(0.6);
 }
 
 .package-status.failed {
