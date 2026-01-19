@@ -564,8 +564,8 @@
 
 .package-badges {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
 }
@@ -573,10 +573,10 @@
 .package-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border-radius: 12px;
-  font-size: 11px;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  font-size: 10px;
   font-weight: 600;
   text-decoration: none;
   transition: all 0.2s ease;

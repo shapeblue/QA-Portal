@@ -365,7 +365,7 @@ const AllPRsView: React.FC = () => {
                                   }
                                 }}
                               >
-                                📦 {cleanPkg}
+                                {cleanPkg}
                               </a>
                             );
                           })}
