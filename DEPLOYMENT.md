@@ -308,6 +308,40 @@ pm2 restart all
      npm run build
      ```
 
+4. **⚠️ CRITICAL: Changes Not Appearing After Deployment**:
+   - **Symptom**: Code updated, rebuilt, but API still returns old data
+   - **Root Cause**: Stale Node.js server process running old compiled code
+   - **Diagnosis**:
+     ```bash
+     # Check if server is running
+     ps aux | grep "node.*server/dist/index.js"
+     
+     # Check process start time vs build time
+     ps -p <PID> -o lstart=
+     ls -lh server/dist/index.js  # Check file modification time
+     
+     # Test API directly
+     curl http://localhost:5001/api/all-open-prs | jq '.[0]'
+     ```
+   - **Solution**:
+     ```bash
+     # Kill the specific stale process
+     ps aux | grep "node.*server/dist/index.js"
+     kill <PID>  # Use specific PID, not pkill
+     
+     # Restart server
+     cd /root/QA-Portal
+     nohup node server/dist/index.js > /tmp/qa-server.log 2>&1 &
+     
+     # Verify new process is running
+     ps aux | grep "node.*server/dist/index.js"
+     tail -20 /tmp/qa-server.log
+     
+     # Test API again
+     curl http://localhost:5001/api/all-open-prs | jq '.[0]'
+     ```
+   - **Prevention**: Use process manager (systemd/pm2) instead of nohup for proper process control
+
 ## Performance Optimization
 
 1. **Caching**: Implement Redis or similar for caching GitHub API responses
