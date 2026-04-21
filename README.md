@@ -310,6 +310,177 @@ If you encounter CORS issues, ensure the proxy is correctly configured in `clien
 4. Test thoroughly
 5. Submit a pull request
 
+## 🛠️ Tools Reference
+
+This section describes every tool, script, and component in the repository.
+
+---
+
+### Web Application
+
+#### Frontend Components (`client/src/components/`)
+
+| Component | Description |
+|-----------|-------------|
+| `App.tsx` | Root component — tab-based navigation between Health Check PRs, All PRs, Upgrade Tests, and Test Failures views. |
+| `PRCard.tsx` | Renders a single PR's health check details: smoke test results per hypervisor, approval counts, code coverage badge, and log links. |
+| `SearchBar.tsx` | Search input for looking up any PR by number or GitHub URL. |
+| `AllPRsView.tsx` | Tabular view of all PRs in the database with filtering (ready-to-merge, needs testing, has approvals) and multi-column sorting. |
+| `UpgradeTests.tsx` | Upgrade test results dashboard with three view modes (Heatmap, Accordion, Historical), version/distro/hypervisor filters, and a statistics panel. |
+| `ReadyToMerge.tsx` | Aggregates PRs that meet approval and test criteria; supports card or table display. |
+| `ReadyToMergeCard.tsx` | Card view for a single ready-to-merge PR, showing key metrics at a glance. |
+| `ReadyToMergeTable.tsx` | Tabular view of ready-to-merge PRs for bulk review. |
+| `TestFailuresRouter.tsx` | Route wrapper that renders `TestResults` under the `/test-failures` path. |
+| `TestResults.tsx` | Displays individual test failure records with expandable details and filtering. |
+
+#### Backend Server (`server/src/index.ts`)
+
+Express + TypeScript API server that connects to the MySQL database and exposes REST endpoints consumed by the frontend. Features connection pooling and automatic retry on timeout.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Health check — returns `{ status: "ok" }`. |
+| `GET /api/health-prs` | Returns all open health-check PRs (labelled `type:healthcheckrun`). |
+| `GET /api/pr/:number` | Returns smoke test results, approvals, and coverage for a single PR. |
+| `GET /api/upgrade-tests` | Returns upgrade test results; supports `fromVersion`, `toVersion`, `distro`, `hypervisor`, `status` query params. |
+| `GET /api/upgrade-tests/filters` | Returns available filter values (versions, distros, hypervisors). |
+| `GET /api/upgrade-tests/stats` | Returns aggregate counts (total, passed, failed, running). |
+
+---
+
+### Data Collection Scripts (`scripts/`) — Production Only
+
+> ⚠️ These scripts write to the database and must only run on the production server.
+
+#### `scrape-github-prs.js`
+Main GitHub PR scraper. Collects approvals/reviews, Codecov coverage, Trillian smoketest results, and PR labels for all open health-check PRs. Updates PR state (open/closed/merged) automatically. Rate-limit aware with configurable delays.
+
+```bash
+node scripts/scrape-github-prs.js                  # All open health-check PRs
+node scripts/scrape-github-prs.js --pr-number=12345 # Single PR
+node scripts/scrape-github-prs.js --all             # All PRs including non-health
+```
+
+#### `update-pr-states.js`
+Batch updates the open/closed/merged state for existing PRs in the database. Processes the oldest PRs first and displays remaining GitHub API quota.
+
+```bash
+node scripts/update-pr-states.js            # Oldest 50 PRs
+node scripts/update-pr-states.js --batch=100
+node scripts/update-pr-states.js --all
+```
+
+#### `parse-test-failures.js`
+Extracts individual test failure records from Trillian bot smoke-test comments and writes them to the `test_failures` table for later analysis.
+
+#### `backfill-milestones.js`
+One-time migration: populates the `milestone` field for all existing open PRs in `pr_states`. Supports a dry-run mode (default) and an `--execute` flag.
+
+```bash
+node scripts/backfill-milestones.js           # Dry run
+node scripts/backfill-milestones.js --execute # Apply changes
+```
+
+#### `backfill-package-builds.js`
+One-time migration: populates the `pr_package_builds` table from historical BlueOrangutan package-build comments on open PRs. Uses the `blueorangutan-parser` library internally.
+
+```bash
+node scripts/backfill-package-builds.js           # Dry run
+node scripts/backfill-package-builds.js --execute # Apply changes
+```
+
+#### `update-flaky-tests-summary.js`
+Aggregates test results from the past month into the `flaky_tests_summary` table for fast dashboard queries. Intended to run hourly via cron.
+
+```bash
+# Typical cron entry
+0 * * * * /usr/bin/node /root/QA-Portal/scripts/update-flaky-tests-summary.js
+```
+
+---
+
+### Database Maintenance Scripts (`scripts/`) — Production Only
+
+#### `cleanup-duplicates.js`
+Removes duplicate rows from `test_results`, keeping only the most recent entry per logical test. Processes deletions in batches of 10 000 rows to avoid table locks. Intended to run nightly via cron.
+
+```bash
+# Typical cron entry
+0 2 * * * /usr/bin/node /root/QA-Portal/scripts/cleanup-duplicates.js
+```
+
+#### `deduplicate-test-results.sh`
+Shell script that creates a deduplicated copy of the `test_results` table and adds a `UNIQUE` constraint to prevent future duplicates. Run once during initial schema remediation.
+
+---
+
+### Operational / Management Scripts (`scripts/`)
+
+#### `manage-scraper.sh`
+Lifecycle manager for the GitHub scraper cron job.
+
+```bash
+./scripts/manage-scraper.sh status    # Show running state
+./scripts/manage-scraper.sh start     # Enable cron job
+./scripts/manage-scraper.sh stop      # Disable cron job
+./scripts/manage-scraper.sh logs      # Tail scraper log
+./scripts/manage-scraper.sh run-once  # Trigger a single run
+```
+
+#### `monitor-scraper.sh`
+Health watchdog for the scraper. Detects hung or crashed processes and restarts them automatically. Logs to `/tmp/scraper-monitor.log`. Runs via cron every 30 minutes.
+
+#### `scraper-cron.sh`
+Thin cron wrapper that sets `PATH` and environment variables before invoking `scrape-github-prs.js`. Rotates `/var/log/cloudstack-pr-scraper.log` to keep the last 1 000 lines.
+
+#### `setup-cron.sh`
+Installs all required cron jobs on the production server:
+- Scraper — every 30 minutes
+- Scraper monitor — every 30 minutes
+- Portal health check — every 5 minutes
+
+#### `setup-monitoring.sh`
+Sets up the portal health-check monitoring system and the `/usr/local/bin/qa-portal-monitor.sh` helper.
+
+#### `deploy.sh`
+Deploys the current branch from a local machine to the production server over SSH. Accepts `--skip-tests`, `--branch NAME`, and `--no-restart` flags.
+
+#### `setup-local.sh`
+First-time local-environment setup script. Verifies Node.js ≥ 16 and npm, installs root and client dependencies, and creates the `server/.env` file from the example template.
+
+---
+
+### Library Modules (`scripts/lib/`)
+
+#### `blueorangutan-parser.js`
+Parses BlueOrangutan bot package-build comments in multiple versioned formats (V1, V2, V3) to extract per-platform build results (`el7`, `el8`, `el9`, `debian`, etc.) and detect failures. Used by the scraper and backfill scripts.
+
+#### `package-validation.js`
+Validates and sanitises package names and build URLs before database insertion. Guards against SQL injection, unknown platform names, and malformed data.
+
+---
+
+### Root-Level Utility Scripts
+
+#### `check_staleness.js`
+Quick diagnostic snippet: given a hardcoded package-build comment timestamp and a HEAD-commit timestamp, logs whether the packages are `STALE` and the time difference in seconds. Useful for debugging the staleness logic.
+
+#### `start-servers.sh`
+Convenience script for production: kills any existing processes on ports 5001 and 3000, then starts the compiled backend (`server/dist/index.js`) and the React frontend (`client/`) in the background, writing their PIDs to `/tmp/`.
+
+#### `test-deployment.sh`
+End-to-end smoke test for the production server. Checks network connectivity, backend health endpoint, frontend HTTP status, API responses, and database connectivity.
+
+---
+
+### Database Migrations (`scripts/migrations/`)
+
+| File | Description |
+|------|-------------|
+| `001_add_package_builds_table.sql` | Creates the `pr_package_builds` table used by `backfill-package-builds.js` and the live scraper to store per-platform package build status for each PR. |
+
+---
+
 ## License
 
 ISC
