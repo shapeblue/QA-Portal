@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PRData } from '../types';
 import { api } from '../services/api';
+import { clickable } from '../utils/a11y';
 import './AllPRsView.css';
 
 interface PRWithStatus extends PRData {
@@ -206,41 +207,46 @@ const AllPRsView: React.FC = () => {
       {!loading && !error && (
         <>
           <div className="stats-summary">
-            <div 
+            <div
               className={`stat-box clickable ${activeFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('all')}
+              {...clickable(() => setActiveFilter('all'))}
+              aria-pressed={activeFilter === 'all'}
               title="Click to show all PRs"
             >
               <div className="stat-number">{prs.length}</div>
               <div className="stat-label">Total Open</div>
             </div>
-            <div 
+            <div
               className={`stat-box ready clickable ${activeFilter === 'ready' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('ready')}
+              {...clickable(() => setActiveFilter('ready'))}
+              aria-pressed={activeFilter === 'ready'}
               title="Click to show only ready to merge PRs"
             >
               <div className="stat-number">{readyCount}</div>
               <div className="stat-label">Ready to Merge</div>
             </div>
-            <div 
+            <div
               className={`stat-box clickable ${activeFilter === 'has-approvals' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('has-approvals')}
+              {...clickable(() => setActiveFilter('has-approvals'))}
+              aria-pressed={activeFilter === 'has-approvals'}
               title="Click to show PRs with 2+ LGTMs"
             >
               <div className="stat-number">{prs.filter(pr => pr.meetsApprovalCriteria).length}</div>
               <div className="stat-label">Has 2+ LGTMs</div>
             </div>
-            <div 
+            <div
               className={`stat-box clickable ${activeFilter === 'has-tests' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('has-tests')}
+              {...clickable(() => setActiveFilter('has-tests'))}
+              aria-pressed={activeFilter === 'has-tests'}
               title="Click to show PRs with all tests passing"
             >
               <div className="stat-number">{prs.filter(pr => pr.meetsTestCriteria).length}</div>
               <div className="stat-label">All Tests Pass</div>
             </div>
-            <div 
+            <div
               className={`stat-box needs-testing clickable ${activeFilter === 'needs-testing' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('needs-testing')}
+              {...clickable(() => setActiveFilter('needs-testing'))}
+              aria-pressed={activeFilter === 'needs-testing'}
               title="Click to show PRs that need testing"
             >
               <div className="stat-number">{needsTestingCount}</div>
@@ -283,15 +289,15 @@ const AllPRsView: React.FC = () => {
                     className={`pr-row ${pr.isReadyToMerge ? 'ready-to-merge' : ''}`}
                   >
                     <td className="status-cell">
-                      {pr.isReadyToMerge && <span className="status-badge ready" title="Ready to Merge">✅</span>}
+                      {pr.isReadyToMerge && <span className="status-badge ready" role="img" aria-label="Ready to merge" title="Ready to Merge">✅</span>}
                       {!pr.isReadyToMerge && pr.meetsApprovalCriteria && !pr.meetsTestCriteria && (
-                        <span className="status-badge partial" title="Has approvals, waiting on tests">🧪</span>
+                        <span className="status-badge partial" role="img" aria-label="Has approvals, waiting on tests" title="Has approvals, waiting on tests">🧪</span>
                       )}
                       {!pr.isReadyToMerge && !pr.meetsApprovalCriteria && pr.meetsTestCriteria && (
-                        <span className="status-badge partial" title="Tests pass, needs approvals">✓</span>
+                        <span className="status-badge partial" role="img" aria-label="Tests pass, needs approvals" title="Tests pass, needs approvals">✓</span>
                       )}
                       {!pr.meetsApprovalCriteria && !pr.meetsTestCriteria && (
-                        <span className="status-badge pending" title="Pending">⚠️</span>
+                        <span className="status-badge pending" role="img" aria-label="Pending" title="Pending">⚠️</span>
                       )}
                     </td>
                     <td className="pr-number-cell">
@@ -362,6 +368,7 @@ const AllPRsView: React.FC = () => {
                               target="_blank"
                               rel="noopener noreferrer"
                               className={`package-status ${statusClass}`}
+                              aria-label={`Packages: ${statusText}`}
                               title={tooltipText}
                             >
                               {icon}

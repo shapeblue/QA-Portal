@@ -11,3 +11,11 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Visible keyboard-focus indicator for every interactive element (buttons,
+   links, inputs, and elements made clickable via role="button"). Uses
+   :focus-visible so it only shows for keyboard/AT users, not mouse clicks. */
+:focus-visible {
+  outline: 2px solid #0366d6;
+  outline-offset: 2px;
+}
