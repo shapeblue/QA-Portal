@@ -5,34 +5,42 @@
 :root {
   /* Surfaces & borders */
   --surface: #ffffff;
-  --border: #e1e4e8;
-  --border-muted: #e2e8f0;
-  --bg-subtle: #f6f8fa;
+  --border: #e4e8ee;
+  --border-muted: #eaedf2;
+  --bg-subtle: #f4f6f9;
 
-  /* Text */
-  --text-primary: #24292e;
-  --text-strong: #2d3748;
-  --text-secondary: #586069;
-  --text-muted: #718096;
+  /* Text (tuned for WCAG AA on white) */
+  --text-primary: #1f2328;
+  --text-strong: #1f2328;
+  --text-secondary: #59636e;
+  --text-muted: #6e7781;
 
-  /* Brand / links */
-  --color-primary: #0366d6;
-  --color-accent: #4299e1;
+  /* Brand / links — one cohesive blue */
+  --color-primary: #1f6feb;
+  --color-primary-strong: #1a56c4;
+  --color-accent: #3b82f6;
+
+  /* Warning (amber, used sparingly) */
+  --color-warn: #c2620a;
+  --bg-warn: #fff4e5;
 
   /* Success */
-  --color-success: #28a745;
+  --color-success: #1a7f37;
   --color-success-text: #0e5c23;
-  --bg-success: #dcffe4;
+  --bg-success: #e6f4ea;
 
   /* Danger */
-  --color-danger: #d73a49;
+  --color-danger: #cf222e;
   --color-danger-text: #86181d;
   --bg-danger: #ffeef0;
 
+  /* Header */
+  --header-bg: linear-gradient(135deg, #1f6feb 0%, #1450b5 100%);
+
   /* Elevation & radius */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --radius-sm: 4px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
 }
@@ -53,10 +61,14 @@
     --text-secondary: #9da7b3;
     --text-muted: #8b949e;
 
-    --color-primary: #58a6ff;
+    --color-primary: #4493f8;
+    --color-primary-strong: #1f6feb;
     --color-accent: #58a6ff;
 
-    --color-success: #238636;
+    --color-warn: #d2922b;
+    --bg-warn: #2a2010;
+
+    --color-success: #3fb950;
     --color-success-text: #56d364;
     --bg-success: #122017;
 
@@ -64,8 +76,10 @@
     --color-danger-text: #ff7b72;
     --bg-danger: #2d1416;
 
+    --header-bg: linear-gradient(135deg, #1f6feb 0%, #10316e 100%);
+
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
   }
 
   /* Base text colour for any element that doesn't set its own (catches the few
