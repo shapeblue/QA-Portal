@@ -1,3 +1,41 @@
+/* Design tokens. Values intentionally equal the hex codes they replaced, so
+   the light theme is unchanged; a future prefers-color-scheme: dark block can
+   override these in one place. Semantic names — use the closest one rather than
+   reintroducing raw hex codes in component CSS. */
+:root {
+  /* Surfaces & borders */
+  --border: #e1e4e8;
+  --border-muted: #e2e8f0;
+  --bg-subtle: #f6f8fa;
+
+  /* Text */
+  --text-primary: #24292e;
+  --text-strong: #2d3748;
+  --text-secondary: #586069;
+  --text-muted: #718096;
+
+  /* Brand / links */
+  --color-primary: #0366d6;
+  --color-accent: #4299e1;
+
+  /* Success */
+  --color-success: #28a745;
+  --color-success-text: #0e5c23;
+  --bg-success: #dcffe4;
+
+  /* Danger */
+  --color-danger: #d73a49;
+  --color-danger-text: #86181d;
+  --bg-danger: #ffeef0;
+
+  /* Elevation & radius */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -16,6 +54,6 @@ code {
    links, inputs, and elements made clickable via role="button"). Uses
    :focus-visible so it only shows for keyboard/AT users, not mouse clicks. */
 :focus-visible {
-  outline: 2px solid #0366d6;
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
