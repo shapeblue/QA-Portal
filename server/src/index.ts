@@ -1,6 +1,10 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import pino from 'pino';
+import pinoHttp from 'pino-http';
 import mysql from 'mysql2/promise';
 import axios from 'axios';
 import { parseSmokeTests, SmokeTestResult } from './parsers/trillian';
@@ -8,12 +12,49 @@ import { parseCodeCoverage } from './parsers/codecov';
 
 dotenv.config();
 
+// Structured logger. Set LOG_LEVEL=debug locally for verbose output.
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+
 const app = express();
 const PORT = parseInt(process.env.PORT || '5001');
 
-// Middleware
-app.use(cors());
+// Behind nginx in production — trust the proxy so rate-limit sees the real client IP.
+app.set('trust proxy', 1);
+
+// Security headers. The dashboard is intentionally public (see ADR-0002), so we add
+// baseline hardening rather than auth.
+app.use(helmet());
+
+// CORS scoped to the portal's own origin. CORS_ORIGIN may be a comma-separated list;
+// if unset we fall back to reflecting any origin (dev convenience only).
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : undefined;
+app.use(cors(corsOrigins ? { origin: corsOrigins } : {}));
+
 app.use(express.json());
+
+// Request logging.
+app.use(pinoHttp({ logger }));
+
+// Generous global rate limit — protects against accidental floods without hurting the
+// public read traffic. The token-spending artifact proxy gets a much stricter limit below.
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', globalLimiter);
+
+// Strict per-IP limit for the GitHub-token-spending artifact proxy (see ADR-0002).
+const artifactLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many artifact download requests, please slow down' },
+});
 
 // Database configuration
 const dbConfig = {
@@ -32,7 +73,7 @@ const dbConfig = {
 
 // Create database connection pool
 const pool = mysql.createPool(dbConfig);
-console.log('Database connection pool created');
+logger.info('Database connection pool created');
 
 // Helper function to execute queries with retry logic
 async function queryWithRetry<T = any>(
@@ -49,7 +90,7 @@ async function queryWithRetry<T = any>(
       const isTimeout = error.code === 'ETIMEDOUT' || error.errno === -60;
       
       if (isTimeout && !isLastAttempt) {
-        console.log(`Query timeout, retrying... (attempt ${attempt + 1}/${retries})`);
+        logger.warn(`Query timeout, retrying... (attempt ${attempt + 1}/${retries})`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
         continue;
       }
@@ -186,7 +227,7 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
          AND pa1.approval_created_at = pa2.max_date`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch approvals:', err.message);
+      logger.warn({ err: err.message, source: 'pr_approvals' }, 'Schema drift: could not fetch approvals');
       return [];
     })
   ]);
@@ -335,7 +376,7 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
       [prNumber, prNumber]
     );
   } catch (err: any) {
-    console.warn(`Could not fetch approvals for PR #${prNumber}:`, err.message);
+    logger.warn({ err: err.message, source: 'pr_approvals', prNumber }, 'Schema drift: could not fetch approvals for PR');
   }
   
   // Parse code coverage
@@ -508,7 +549,6 @@ async function getUpgradeTestStats() {
 
 // Get ALL open PRs (not just health check labeled ones)
 async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
-  console.log('[DEBUG] getAllOpenPRsFromDatabase called');
   // Get all unique open PRs from multiple sources, using pr_states for accurate state
   const allPRs = await queryWithRetry<any[]>(`
     SELECT 
@@ -592,14 +632,14 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
          AND pa1.approval_created_at = pa2.max_date`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch approvals:', err.message);
+      logger.warn({ err: err.message, source: 'pr_approvals' }, 'Schema drift: could not fetch approvals');
       return [];
     }),
     queryWithRetry<any[]>(
       `SELECT DISTINCT pr_number, label_name FROM pr_health_labels WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch labels:', err.message);
+      logger.warn({ err: err.message, source: 'pr_health_labels' }, 'Schema drift: could not fetch labels');
       return [];
     }),
     queryWithRetry<any[]>(
@@ -609,7 +649,7 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
        ORDER BY comment_created_at DESC`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch package builds:', err.message);
+      logger.warn({ err: err.message, source: 'pr_package_builds' }, 'Schema drift: could not fetch package builds');
       return [];
     })
   ]);
@@ -719,20 +759,18 @@ app.get('/api/health-prs', async (req: Request, res: Response) => {
     const prData = await getHealthPRsFromDatabase();
     res.json(prData);
   } catch (error: any) {
-    console.error('Error fetching health PRs:', error);
+    logger.error({ err: error }, 'Error fetching health PRs');
     res.status(500).json({ error: error.message || 'Failed to fetch health check PRs' });
   }
 });
 
 // Get ALL open PRs
 app.get('/api/all-open-prs', async (req: Request, res: Response) => {
-  console.log('[DEBUG] /api/all-open-prs endpoint hit');
   try {
     const prData = await getAllOpenPRsFromDatabase();
-    console.log('[DEBUG] Returning', prData.length, 'PRs');
     res.json(prData);
   } catch (error: any) {
-    console.error('Error fetching all open PRs:', error);
+    logger.error({ err: error }, 'Error fetching all open PRs');
     res.status(500).json({ error: error.message || 'Failed to fetch all open PRs' });
   }
 });
@@ -767,7 +805,7 @@ app.get('/api/ready-to-merge', async (req: Request, res: Response) => {
     
     res.json(readyPRs);
   } catch (error: any) {
-    console.error('Error fetching ready to merge PRs:', error);
+    logger.error({ err: error }, 'Error fetching ready to merge PRs');
     res.status(500).json({ error: error.message || 'Failed to fetch ready to merge PRs' });
   }
 });
@@ -786,7 +824,7 @@ app.get('/api/upgrade-tests', async (req: Request, res: Response) => {
     const results = await getUpgradeTestsFromDatabase(filters);
     res.json(results);
   } catch (error: any) {
-    console.error('Error fetching upgrade tests:', error);
+    logger.error({ err: error }, 'Error fetching upgrade tests');
     res.status(500).json({ error: error.message || 'Failed to fetch upgrade tests' });
   }
 });
@@ -796,7 +834,7 @@ app.get('/api/upgrade-tests/filters', async (req: Request, res: Response) => {
     const filters = await getUpgradeTestFilters();
     res.json(filters);
   } catch (error: any) {
-    console.error('Error fetching upgrade test filters:', error);
+    logger.error({ err: error }, 'Error fetching upgrade test filters');
     res.status(500).json({ error: error.message || 'Failed to fetch filters' });
   }
 });
@@ -806,7 +844,7 @@ app.get('/api/upgrade-tests/stats', async (req: Request, res: Response) => {
     const stats = await getUpgradeTestStats();
     res.json(stats);
   } catch (error: any) {
-    console.error('Error fetching upgrade test stats:', error);
+    logger.error({ err: error }, 'Error fetching upgrade test stats');
     res.status(500).json({ error: error.message || 'Failed to fetch stats' });
   }
 });
@@ -828,15 +866,21 @@ app.get('/api/pr/:number', async (req: Request, res: Response) => {
 
     res.json(prData);
   } catch (error: any) {
-    console.error('Error fetching PR:', error);
+    logger.error({ err: error }, 'Error fetching PR');
     res.status(500).json({ error: error.message || 'Failed to fetch PR' });
   }
 });
 
-// Artifact download proxy endpoint
-app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response) => {
+// Artifact download proxy endpoint. Spends the server's GITHUB_TOKEN, so it is rate-limited
+// hard and only accepts numeric artifact IDs (see ADR-0002).
+app.get('/api/download-artifact/:artifactId', artifactLimiter, async (req: Request, res: Response) => {
   const { artifactId } = req.params;
-  
+
+  // Validate: GitHub artifact IDs are numeric. Reject anything else before spending the token.
+  if (!/^\d+$/.test(artifactId)) {
+    return res.status(400).json({ error: 'Invalid artifact ID' });
+  }
+
   try {
     const githubToken = process.env.GITHUB_TOKEN;
     if (!githubToken) {
@@ -871,7 +915,7 @@ app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response
     // Pipe the stream to response
     downloadResponse.data.pipe(res);
   } catch (error: any) {
-    console.error('Error downloading artifact:', error.message);
+    logger.error({ err: error.message }, 'Error downloading artifact');
     if (error.response?.status === 410) {
       res.status(410).json({ error: 'Artifact has expired or been deleted' });
     } else if (error.response?.status === 404) {
@@ -930,7 +974,7 @@ app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) 
 
     res.json(failures);
   } catch (error) {
-    console.error('Error fetching test failures:', error);
+    logger.error({ err: error }, 'Error fetching test failures');
     res.status(500).json({ error: 'Failed to fetch test failures' });
   }
 });
@@ -1037,7 +1081,7 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
       byHypervisor
     });
   } catch (error) {
-    console.error('Error fetching test failures summary:', error);
+    logger.error({ err: error }, 'Error fetching test failures summary');
     res.status(500).json({ error: 'Failed to fetch test failures summary' });
   }
 });
@@ -1078,7 +1122,7 @@ app.get('/api/test-failures/test/:testName', async (req: Request, res: Response)
       history
     });
   } catch (error) {
-    console.error('Error fetching test failure history:', error);
+    logger.error({ err: error }, 'Error fetching test failure history');
     res.status(500).json({ error: 'Failed to fetch test failure history' });
   }
 });
@@ -1086,7 +1130,7 @@ app.get('/api/test-failures/test/:testName', async (req: Request, res: Response)
 // Get flaky tests - optimized version using summary table
 app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
   try {
-    console.log('Fetching flaky tests from summary table...');
+    logger.debug('Fetching flaky tests from summary table...');
     const rawData = await queryWithRetry<any[]>(
       `SELECT 
         test_name,
@@ -1174,23 +1218,34 @@ app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
       };
     });
     
-    console.log(`Fetched ${flakyTestsByFile.length} flaky test files`);
+    logger.debug(`Fetched ${flakyTestsByFile.length} flaky test files`);
     res.json(flakyTestsByFile);
   } catch (error) {
-    console.error('Error fetching flaky tests:', error);
+    logger.error({ err: error }, 'Error fetching flaky tests');
     res.status(500).json({ error: 'Failed to fetch flaky tests' });
   }
 });
 
-// Health check endpoint
-app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString()
-  });
+// Health check endpoint — pings the DB so it reports unhealthy when the database is down.
+app.get('/api/health', async (req: Request, res: Response) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'OK',
+      database: 'up',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    logger.error({ err: error }, 'Health check failed: database unreachable');
+    res.status(503).json({
+      status: 'ERROR',
+      database: 'down',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on port ${PORT}`);
+  logger.info(`Server is running on port ${PORT}`);
 });
