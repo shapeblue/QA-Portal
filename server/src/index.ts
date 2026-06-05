@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import axios from 'axios';
+import { parseSmokeTests, SmokeTestResult } from './parsers/trillian';
+import { parseCodeCoverage } from './parsers/codecov';
 
 dotenv.config();
 
@@ -58,18 +60,7 @@ async function queryWithRetry<T = any>(
   throw new Error('Query failed after all retries');
 }
 
-// Types
-interface SmokeTestResult {
-  hypervisor: string;
-  version?: string | null;
-  passed: number;
-  total: number;
-  status: 'OK' | 'FAIL';
-  logsUrl?: string;
-  failedTests?: string[];
-  createdAt?: string;
-}
-
+// Types (SmokeTestResult is defined alongside its parser in ./parsers/trillian)
 interface PRData {
   number: number;
   title: string;
@@ -227,161 +218,16 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
     const reviewResults = reviewsByPR.get(row.pr_number) || [];
     
     // Parse smoke tests from Trillian comments
-    const smokeTests: SmokeTestResult[] = trillianResults
-      .map((tr: any): SmokeTestResult | null => {
-        const comment = tr.trillian_comment || '';
-        let passed = 0;
-        let total = 0;
-        
-        // Parse "141 look OK, 0 have errors" pattern
-        const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
-        const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
-        
-        if (okMatch) passed = parseInt(okMatch[1]);
-        if (errorMatch && okMatch) total = passed + parseInt(errorMatch[1]);
-        
-        // Get logs URL from database field (preferred) or extract from comment as fallback
-        let logsUrl = tr.logs_url;
-        if (!logsUrl) {
-          const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-          logsUrl = logsMatch ? logsMatch[0] : undefined;
-        }
-        
-        // Extract failed test names from markdown table format
-        const failedTests: string[] = [];
-        if (errorMatch && parseInt(errorMatch[1]) > 0) {
-          // Parse markdown table format:
-          // Test | Result | Time (s) | Test File
-          // --- | --- | --- | ---
-          // test_name | `Error` | 1.10 | test_file.py
-          
-          const lines = comment.split('\n');
-          let inTable = false;
-          
-          for (const line of lines) {
-            // Check if we're starting a table (header with "Test | Result")
-            if (line.includes('Test') && line.includes('Result') && line.includes('|')) {
-              inTable = true;
-              continue;
-            }
-            
-            // Skip separator line (--- | --- | ---)
-            if (line.trim().startsWith('---')) {
-              continue;
-            }
-            
-            // If we're in a table and line has pipes, parse it
-            if (inTable && line.includes('|')) {
-              const columns = line.split('|').map((col: string) => col.trim());
-              if (columns.length >= 2) {
-                const testName = columns[0];
-                const result = columns[1];
-                
-                // Check if this is a failed test (Error, Fail, etc.)
-                if (testName.startsWith('test_') && 
-                    (result.toLowerCase().includes('error') || 
-                     result.toLowerCase().includes('fail'))) {
-                  if (!failedTests.includes(testName)) {
-                    failedTests.push(testName);
-                  }
-                }
-              }
-            } else if (inTable && line.trim() === '') {
-              // Empty line might mean end of table
-              inTable = false;
-            }
-          }
-          
-          // Fallback: also try simple pattern matching if table parsing didn't work
-          if (failedTests.length === 0) {
-            const testErrorPattern = /(test_\w+)[\s.]*(?:ERROR|FAIL|FAILED)/gi;
-            let match;
-            while ((match = testErrorPattern.exec(comment)) !== null) {
-              if (!failedTests.includes(match[1])) {
-                failedTests.push(match[1]);
-              }
-            }
-          }
-        }
-        
-        // Only return if we found actual test results
-        if (okMatch && total > 0) {
-          // Extract version from hypervisor name if not already in version field
-          let version = tr.version;
-          let hypervisor = tr.hypervisor;
-          
-          if (!version && hypervisor) {
-            // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
-            const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
-            if (hvMatch) {
-              const hvName = hvMatch[1];
-              const hvVersion = hvMatch[2];
-              // Only extract if the second part looks like a version (contains numbers)
-              if (/\d/.test(hvVersion)) {
-                hypervisor = hvName;
-                version = hvVersion;
-              }
-            }
-          }
-          
-          return {
-            hypervisor: hypervisor?.toUpperCase() || 'UNKNOWN',
-            version: version || null,
-            passed,
-            total,
-            status: (errorMatch && parseInt(errorMatch[1]) > 0) ? 'FAIL' as const : 'OK' as const,
-            logsUrl,
-            failedTests: failedTests.length > 0 ? failedTests : undefined,
-            createdAt: tr.trillian_created_at
-          };
-        }
-        return null;
-      })
-      .filter((test): test is SmokeTestResult => test !== null);
-    
-    // Extract logs URL from Trillian comment
-    let logsUrl: string | undefined;
-    if (trillianResults.length > 0) {
-      const comment = trillianResults[0].trillian_comment || '';
-      const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-      if (logsMatch) logsUrl = logsMatch[0];
-    }
-    
+    const smokeTests: SmokeTestResult[] = parseSmokeTests(trillianResults);
+
+    // Logs URL for the PR as a whole (first hypervisor's, if any)
+    const logsUrl = smokeTests.find(t => t.logsUrl)?.logsUrl;
+
     // Parse code coverage from codecov comment
-    let codeCoverage: { percentage: number; change: number; url: string } | undefined;
-    if (codecovResults.length > 0) {
-      const codecovComment = codecovResults[0].codecov_comment || '';
-      
-      // Try to parse coverage percentage - common formats:
-      // "Coverage: 85.23%" or "85.23% (+2.1%)" or "Coverage is 85.23%"
-      const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
-      
-      // Try to parse coverage change - formats: "+2.1%" or "-1.5%" or "increased by 2.1%"
-      const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || 
-                          codecovComment.match(/(increased|decreased)\s+by\s+(\d+\.?\d*)%/i);
-      
-      // Extract codecov URL
-      const urlMatch = codecovComment.match(/(https?:\/\/(?:app\.)?codecov\.io\/[^\s)]+)/i);
-      
-      if (coverageMatch) {
-        let change = 0;
-        if (changeMatch) {
-          if (changeMatch[1] && (changeMatch[1] === 'increased' || changeMatch[1] === 'decreased')) {
-            change = parseFloat(changeMatch[2] || '0');
-            if (changeMatch[1] === 'decreased') change = -change;
-          } else {
-            change = parseFloat(changeMatch[1]);
-          }
-        }
-        
-        codeCoverage = {
-          percentage: parseFloat(coverageMatch[1]),
-          change: change,
-          url: urlMatch ? urlMatch[1] : `https://app.codecov.io/gh/apache/cloudstack/pull/${row.pr_number}`
-        };
-      }
-    }
-    
+    const codeCoverage = codecovResults.length > 0
+      ? parseCodeCoverage(codecovResults[0].codecov_comment || '', row.pr_number)
+      : undefined;
+
     // Count review states
     const approvals = {
       approved: reviewResults.filter((r: any) => r.state === 'APPROVED').length,
@@ -462,110 +308,10 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
   }
   
   // Parse smoke tests
-  const smokeTests: SmokeTestResult[] = trillianResults
-    .map((tr: any): SmokeTestResult | null => {
-      const comment = tr.trillian_comment || '';
-      let passed = 0;
-      let total = 0;
-      
-      const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
-      const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
-      const skippedMatch = comment.match(/(\d+)\s+did\s+not\s+run/i);
-      
-      if (okMatch) passed = parseInt(okMatch[1]);
-      if (errorMatch && okMatch) {
-        total = passed + parseInt(errorMatch[1]);
-        // Also add skipped tests to total if present
-        if (skippedMatch) {
-          total += parseInt(skippedMatch[1]);
-        }
-      } else if (okMatch && skippedMatch) {
-        // If only OK and skipped (no errors)
-        total = passed + parseInt(skippedMatch[1]);
-      } else if (okMatch) {
-        // If only OK count, use it as total
-        total = passed;
-      }
-      
-      // Extract logs URL for this hypervisor
-      const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-      const logsUrl = logsMatch ? logsMatch[0] : undefined;
-      
-      // Extract failed test names
-      const failedTests: string[] = [];
-      if (errorMatch && parseInt(errorMatch[1]) > 0) {
-        // Parse markdown table format: "test_name | `Error` | time | file"
-        const tableRowPattern = /^\s*(\w*test_\w+)\s*\|\s*`(Error|Failure|error|failure)`/gm;
-        let match;
-        while ((match = tableRowPattern.exec(comment)) !== null) {
-          const testName = match[1];
-          if (testName && !failedTests.includes(testName)) {
-            failedTests.push(testName);
-          }
-        }
-        
-        // Fallback: parse simple "test_name ERROR/FAIL" pattern
-        if (failedTests.length === 0) {
-          const testErrorPattern = /(test_\w+)[\s.]*(?:ERROR|FAIL|FAILED)/gi;
-          while ((match = testErrorPattern.exec(comment)) !== null) {
-            if (!failedTests.includes(match[1])) {
-              failedTests.push(match[1]);
-            }
-          }
-        }
-        
-        // Verify we found the right number of failed tests
-        const expectedFailures = parseInt(errorMatch[1]);
-        if (failedTests.length > 0 && failedTests.length !== expectedFailures) {
-          console.warn(`PR #${prNumber} ${tr.hypervisor}: Found ${failedTests.length} failed test names but summary says ${expectedFailures} failures`);
-        }
-      }
-      
-      // Only return if we found actual test results
-      if (okMatch && total > 0) {
-        const hasErrors = errorMatch && parseInt(errorMatch[1]) > 0;
-        
-        // Extract version from hypervisor name if not already in version field
-        let version = tr.version;
-        let hypervisor = tr.hypervisor;
-        
-        if (!version && hypervisor) {
-          // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
-          const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
-          if (hvMatch) {
-            const hvName = hvMatch[1];
-            const hvVersion = hvMatch[2];
-            // Only extract if the second part looks like a version (contains numbers)
-            if (/\d/.test(hvVersion)) {
-              hypervisor = hvName;
-              version = hvVersion;
-            }
-          }
-        }
-        
-        return {
-          hypervisor: hypervisor?.toUpperCase() || 'UNKNOWN',
-          version: version || null,
-          passed,
-          total,
-          status: hasErrors ? 'FAIL' as const : 'OK' as const,
-          logsUrl,
-          // Always include failedTests array when there are errors (even if parsing failed)
-          failedTests: hasErrors ? (failedTests.length > 0 ? failedTests : []) : undefined,
-          createdAt: tr.trillian_created_at
-        };
-      }
-      return null;
-    })
-    .filter((test): test is SmokeTestResult => test !== null);
-  
-  let logsUrl: string | undefined;
-  if (trillianResults.length > 0) {
-    const comment = trillianResults[0].trillian_comment || '';
-    const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-    if (logsMatch) logsUrl = logsMatch[0];
-  }
-  
+  const smokeTests: SmokeTestResult[] = parseSmokeTests(trillianResults);
+
+  const logsUrl = smokeTests.find(t => t.logsUrl)?.logsUrl;
+
   // Get codecov data
   const codecovResults = await queryWithRetry<any[]>(
     'SELECT codecov_comment, codecov_created_at FROM pr_codecov_comments WHERE pr_number = ? LIMIT 1',
@@ -593,34 +339,10 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
   }
   
   // Parse code coverage
-  let codeCoverage: { percentage: number; change: number; url: string } | undefined;
-  if (codecovResults.length > 0) {
-    const codecovComment = codecovResults[0].codecov_comment || '';
-    
-    const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
-    const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || 
-                        codecovComment.match(/(increased|decreased)\s+by\s+(\d+\.?\d*)%/i);
-    const urlMatch = codecovComment.match(/(https?:\/\/(?:app\.)?codecov\.io\/[^\s)]+)/i);
-    
-    if (coverageMatch) {
-      let change = 0;
-      if (changeMatch) {
-        if (changeMatch[1] && (changeMatch[1] === 'increased' || changeMatch[1] === 'decreased')) {
-          change = parseFloat(changeMatch[2] || '0');
-          if (changeMatch[1] === 'decreased') change = -change;
-        } else {
-          change = parseFloat(changeMatch[1]);
-        }
-      }
-      
-      codeCoverage = {
-        percentage: parseFloat(coverageMatch[1]),
-        change: change,
-        url: urlMatch ? urlMatch[1] : `https://app.codecov.io/gh/apache/cloudstack/pull/${prNumber}`
-      };
-    }
-  }
-  
+  const codeCoverage = codecovResults.length > 0
+    ? parseCodeCoverage(codecovResults[0].codecov_comment || '', prNumber)
+    : undefined;
+
   // Count review states
   const approvals = {
     approved: reviewResults.filter((r: any) => r.state === 'APPROVED').length,
@@ -901,95 +623,13 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
     const trillianResults = allTrillianResults.filter((tr: any) => tr.pr_number === prNumber);
     
     // Parse smoke tests
-    const smokeTests: SmokeTestResult[] = trillianResults
-      .map((tr: any): SmokeTestResult | null => {
-        const comment = tr.trillian_comment || '';
-        let passed = 0;
-        let total = 0;
-        
-        const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
-        const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
-        const skippedMatch = comment.match(/(\d+)\s+did\s+not\s+run/i);
-        
-        if (okMatch) passed = parseInt(okMatch[1]);
-        if (errorMatch && okMatch) {
-          total = passed + parseInt(errorMatch[1]);
-          if (skippedMatch) {
-            total += parseInt(skippedMatch[1]);
-          }
-        } else if (okMatch && skippedMatch) {
-          total = passed + parseInt(skippedMatch[1]);
-        } else if (okMatch) {
-          total = passed;
-        }
-        
-        if (!tr.hypervisor || total === 0) return null;
-        
-        console.log(`[DEBUG getAllOpenPRs] Processing PR #${prNumber} hypervisor:`, tr.hypervisor, 'version:', tr.version, 'total:', total);
-        
-        const status = passed === total ? 'OK' : 'FAIL';
-        
-        // Get logs URL from database field (preferred) or extract from comment as fallback
-        let logsUrl = tr.logs_url;
-        if (!logsUrl) {
-          const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-          logsUrl = logsMatch ? logsMatch[0] : undefined;
-        }
-        
-        // Extract version from hypervisor name if not already in version field
-        let version = tr.version;
-        let hypervisor = tr.hypervisor;
-        
-        if (!version && hypervisor) {
-          // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
-          const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
-          if (hvMatch) {
-            const hvName = hvMatch[1];
-            const hvVersion = hvMatch[2];
-            // Only extract if the second part looks like a version (contains numbers)
-            if (/\d/.test(hvVersion)) {
-              console.log(`[DEBUG] Extracted version from ${hypervisor}: hv=${hvName}, ver=${hvVersion}`);
-              hypervisor = hvName;
-              version = hvVersion;
-            }
-          }
-        }
-        
-        return {
-          hypervisor: hypervisor.toUpperCase(),
-          version: version || null,
-          passed,
-          total,
-          status,
-          logsUrl,
-          createdAt: tr.trillian_created_at || new Date().toISOString()
-        };
-      })
-      .filter((st): st is SmokeTestResult => st !== null);
+    const smokeTests: SmokeTestResult[] = parseSmokeTests(trillianResults);
 
     // Get codecov for this PR
     const codecovResults = allCodecovResults.filter((cc: any) => cc.pr_number === prNumber);
-    let codeCoverage: { percentage: number; change: number; url: string } | undefined;
-    if (codecovResults.length > 0 && codecovResults[0].codecov_comment) {
-      const codecovComment = codecovResults[0].codecov_comment || '';
-      const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
-      const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || codecovComment.match(/(\d+\.?\d*)% of diff/);
-      
-      if (coverageMatch) {
-        const percentage = parseFloat(coverageMatch[1]);
-        let change = 0;
-        if (changeMatch) {
-          const changeStr = changeMatch[1];
-          change = parseFloat(changeStr);
-        }
-        
-        codeCoverage = {
-          percentage,
-          change,
-          url: `https://github.com/apache/cloudstack/pull/${prNumber}`
-        };
-      }
-    }
+    const codeCoverage = codecovResults.length > 0
+      ? parseCodeCoverage(codecovResults[0].codecov_comment || '', prNumber)
+      : undefined;
 
     // Get reviews for this PR
     const reviewResults = allReviewResults.filter((r: any) => r.pr_number === prNumber);
