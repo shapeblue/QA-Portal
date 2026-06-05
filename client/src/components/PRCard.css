@@ -1,5 +1,5 @@
 .pr-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
@@ -157,7 +157,7 @@
   font-family: 'Courier New', monospace;
   font-size: 12px;
   padding: 4px 8px;
-  background: white;
+  background: var(--surface);
   border-radius: 3px;
   color: var(--color-danger-text);
   border-left: 2px solid var(--color-danger);

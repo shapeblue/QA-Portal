@@ -4,6 +4,7 @@
    reintroducing raw hex codes in component CSS. */
 :root {
   /* Surfaces & borders */
+  --surface: #ffffff;
   --border: #e1e4e8;
   --border-muted: #e2e8f0;
   --bg-subtle: #f6f8fa;
@@ -34,6 +35,44 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+}
+
+/* Dark theme: override the token values only. Components reference tokens, so
+   the structural chrome (surfaces, text, borders, primary/semantic colors)
+   flips automatically. A few vivid status/heatmap accent colors are not yet
+   tokenized and stay as-is. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #161b22;
+    --border: #30363d;
+    --border-muted: #30363d;
+    --bg-subtle: #0d1117;
+
+    --text-primary: #e6edf3;
+    --text-strong: #f0f6fc;
+    --text-secondary: #9da7b3;
+    --text-muted: #8b949e;
+
+    --color-primary: #58a6ff;
+    --color-accent: #58a6ff;
+
+    --color-success: #238636;
+    --color-success-text: #56d364;
+    --bg-success: #122017;
+
+    --color-danger: #f85149;
+    --color-danger-text: #ff7b72;
+    --bg-danger: #2d1416;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Base text colour for any element that doesn't set its own (catches the few
+     remaining untokenized spots so they aren't black-on-dark). */
+  body {
+    color: var(--text-primary);
+  }
 }
 
 body {

@@ -11,11 +11,11 @@
 .page-header h1 {
   font-size: 2em;
   margin-bottom: 10px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .subtitle {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 1.1em;
 }
 
@@ -23,7 +23,7 @@
   text-align: center;
   padding: 50px;
   font-size: 1.2em;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .error {
@@ -37,7 +37,7 @@
 }
 
 .stat-card {
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
   padding: 20px 30px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -52,14 +52,14 @@
 }
 
 .stat-label {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9em;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .flaky-tests-section {
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -68,7 +68,7 @@
 .flaky-tests-section h2 {
   margin-top: 0;
   margin-bottom: 20px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .test-files-list {
@@ -78,8 +78,8 @@
 }
 
 .test-file-group {
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -89,10 +89,10 @@
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: #f8f9fa;
+  background: var(--bg-subtle);
   cursor: pointer;
   transition: background 0.2s;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border);
 }
 
 .test-file-header:hover {
@@ -100,7 +100,7 @@
 }
 
 .expand-icon {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9em;
   min-width: 16px;
   user-select: none;
@@ -120,12 +120,12 @@
 }
 
 .file-stats {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.85em;
 }
 
 .last-failure {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9em;
   white-space: nowrap;
 }
@@ -159,7 +159,7 @@
   padding: 12px;
   text-align: left;
   font-weight: 600;
-  color: #555;
+  color: var(--text-secondary);
   border-bottom: 2px solid #ddd;
 }
 
@@ -222,7 +222,7 @@
   position: relative;
   width: 150px;
   height: 24px;
-  background: #e0e0e0;
+  background: var(--border);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -244,7 +244,7 @@
   height: 100%;
   font-size: 0.85em;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
   z-index: 1;
 }
 
@@ -270,7 +270,7 @@
 }
 
 .date-cell {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9em;
   white-space: nowrap;
 }
@@ -304,7 +304,7 @@
 }
 
 .more-prs {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.85em;
   font-style: italic;
 }
@@ -312,7 +312,7 @@
 .no-data {
   text-align: center;
   padding: 40px;
-  color: #666;
+  color: var(--text-secondary);
   font-size: 1.1em;
 }
 

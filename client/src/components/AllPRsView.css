@@ -37,7 +37,7 @@
   min-width: 240px;
   font-size: 14px;
   color: var(--text-primary);
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
@@ -49,7 +49,7 @@
 
 .refresh-button {
   padding: 10px 16px;
-  background: white;
+  background: var(--surface);
   border: 2px solid var(--border-muted);
   border-radius: 8px;
   font-weight: 600;
@@ -60,7 +60,7 @@
 }
 
 .refresh-button:hover:not(:disabled) {
-  background: #f7fafc;
+  background: var(--bg-subtle);
   border-color: #cbd5e0;
 }
 
@@ -74,7 +74,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: white;
+  background: var(--surface);
   border: 2px solid var(--border-muted);
   border-radius: 8px;
   font-weight: 600;
@@ -95,7 +95,7 @@
 }
 
 .stat-box {
-  background: white;
+  background: var(--surface);
   padding: 20px;
   border-radius: 8px;
   border: 2px solid var(--border-muted);
@@ -120,7 +120,7 @@
 }
 
 .stat-box.ready {
-  background: linear-gradient(135deg, #f0fff4 0%, #e6ffed 100%);
+  background: linear-gradient(135deg, var(--bg-success) 0%, #e6ffed 100%);
   border-color: #48bb78;
 }
 
@@ -162,7 +162,7 @@
 }
 
 .table-container {
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   overflow-x: auto;
@@ -204,11 +204,11 @@
 }
 
 .all-prs-table tbody tr:hover {
-  background-color: #f7fafc;
+  background-color: var(--bg-subtle);
 }
 
 .all-prs-table tbody tr.ready-to-merge {
-  background: linear-gradient(90deg, #f0fff4 0%, #e6ffed 100%);
+  background: linear-gradient(90deg, var(--bg-success) 0%, #e6ffed 100%);
   border-left: 4px solid #48bb78;
 }
 
@@ -285,7 +285,7 @@
 }
 
 .assignee-link {
-  color: #4a5568;
+  color: var(--text-strong);
   font-size: 12px;
   text-decoration: none;
   padding: 2px 8px;
@@ -343,12 +343,12 @@
 }
 
 .approval-cell.meets-criteria {
-  background: #f0fff4;
+  background: var(--bg-success);
   font-weight: 600;
 }
 
 .changes-cell.meets-criteria {
-  background: #f0fff4;
+  background: var(--bg-success);
 }
 
 .changes-cell.has-issues {
@@ -356,7 +356,7 @@
 }
 
 .tests-cell.meets-criteria {
-  background: #f0fff4;
+  background: var(--bg-success);
 }
 
 .approval-badge {
@@ -463,7 +463,7 @@
 .updated-cell {
   text-align: center;
   font-weight: 600;
-  color: #4a5568;
+  color: var(--text-strong);
   font-size: 13px;
 }
 

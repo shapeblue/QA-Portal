@@ -73,7 +73,7 @@ body {
 .tab-navigation {
   display: flex;
   gap: 4px;
-  background: white;
+  background: var(--surface);
   border-bottom: 2px solid var(--border);
   padding: 0 24px;
 }
@@ -164,7 +164,7 @@ body {
   padding: 8px 16px;
   font-size: 14px;
   color: var(--color-primary);
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
@@ -244,14 +244,14 @@ body {
 .no-results {
   text-align: center;
   padding: 48px;
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-secondary);
 }
 
 .app-footer {
-  background: white;
+  background: var(--surface);
   border-top: 1px solid var(--border);
   padding: 16px 24px;
   text-align: center;

@@ -41,7 +41,7 @@
 }
 
 .toggle-btn.active {
-  background: white;
+  background: var(--surface);
   color: var(--color-primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
@@ -60,7 +60,7 @@
 }
 
 .stat-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 20px;
@@ -94,7 +94,7 @@
 
 /* Filters */
 .upgrade-filters {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 16px;
@@ -120,7 +120,7 @@
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
+  background: var(--surface);
   font-size: 14px;
   cursor: pointer;
   transition: border-color 0.2s;
@@ -133,14 +133,14 @@
 .filter-row select:disabled {
   background: var(--bg-subtle);
   cursor: not-allowed;
-  color: #6a737d;
+  color: var(--text-secondary);
 }
 
 .filter-row button {
   padding: 8px 16px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
+  background: var(--surface);
   font-size: 14px;
   cursor: pointer;
   font-weight: 500;
@@ -168,7 +168,7 @@
 
 /* Results Table */
 .results-table-container {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow-x: auto;
@@ -256,7 +256,7 @@
 
 /* Empty State */
 .no-results {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 48px;
@@ -277,7 +277,7 @@
 }
 
 .version-group {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -342,7 +342,7 @@
 /* Matrix View */
 .matrix-table-container {
   overflow-x: auto;
-  background: white;
+  background: var(--surface);
 }
 
 .matrix-table {
@@ -376,7 +376,7 @@
 }
 
 .matrix-table .os-cell {
-  background: #fafbfc;
+  background: var(--bg-subtle);
   padding: 8px 12px;
   font-weight: 600;
   color: var(--color-primary);
@@ -401,7 +401,7 @@
 }
 
 .matrix-table tbody tr:hover .os-cell {
-  background: #eef3f8;
+  background: var(--bg-subtle);
 }
 
 .matrix-cell-content {
@@ -435,7 +435,7 @@
 }
 
 .cell-duration {
-  color: #6a737d;
+  color: var(--text-secondary);
   font-weight: 500;
   font-size: 9px;
 }
@@ -464,7 +464,7 @@
 
 /* Historical Runs View */
 .history-view {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
@@ -575,7 +575,7 @@
 
 /* Heatmap View */
 .heatmap-view {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
@@ -633,7 +633,7 @@
 }
 
 .heatmap-row-header {
-  background: #fafbfc;
+  background: var(--bg-subtle);
   text-align: left !important;
   font-weight: 600;
   color: var(--color-primary);
@@ -659,7 +659,7 @@
 }
 
 .heatmap-cell-empty {
-  background: #f8f9fa;
+  background: var(--bg-subtle);
 }
 
 .cell-empty-text {
@@ -679,7 +679,7 @@
 
 .cell-pass-low {
   background: #ffc107;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .cell-fail {
@@ -743,7 +743,7 @@
 
 .close-detail-btn {
   padding: 6px 12px;
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
@@ -760,7 +760,7 @@
 
 .mini-matrix-container {
   overflow-x: auto;
-  background: white;
+  background: var(--surface);
   border-radius: 6px;
   border: 1px solid var(--border);
 }
@@ -794,7 +794,7 @@
   text-align: left;
   font-weight: 600;
   color: var(--color-primary);
-  background: #fafbfc;
+  background: var(--bg-subtle);
 }
 
 .mini-matrix-table tbody tr:hover td {
@@ -802,7 +802,7 @@
 }
 
 .mini-matrix-table tbody tr:hover td:first-child {
-  background: #eef3f8;
+  background: var(--bg-subtle);
 }
 
 
@@ -818,7 +818,7 @@
 }
 
 .upgrade-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
@@ -978,7 +978,7 @@
 }
 
 .accordion-item {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 12px;
@@ -1072,7 +1072,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: white;
+  background: var(--surface);
   border-radius: 4px;
   margin-bottom: 4px;
   font-size: 14px;
@@ -1138,7 +1138,7 @@
 }
 
 .accordion-test-item.clickable:hover {
-  background: #fafbfc;
+  background: var(--bg-subtle);
 }
 
 .test-expand-icon {
