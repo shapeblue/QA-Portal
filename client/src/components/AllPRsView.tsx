@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { PRData } from '../types';
 import { api } from '../services/api';
 import { clickable } from '../utils/a11y';
+import RefreshControls from './RefreshControls';
 import './AllPRsView.css';
+
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 interface PRWithStatus extends PRData {
   meetsApprovalCriteria: boolean;
@@ -23,10 +26,21 @@ const AllPRsView: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortField, setSortField] = useState<SortField>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [search, setSearch] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   useEffect(() => {
     loadAllPRs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => loadAllPRs(), AUTO_REFRESH_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh]);
 
   const loadAllPRs = async () => {
     setLoading(true);
@@ -75,6 +89,7 @@ const AllPRsView: React.FC = () => {
       });
       
       setPRs(prsWithStatus);
+      setLastUpdated(new Date());
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to load PRs');
     } finally {
@@ -108,6 +123,16 @@ const AllPRsView: React.FC = () => {
         break;
       default:
         filtered = prs;
+    }
+
+    // Free-text search over number, title, and assignees
+    const q = search.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter(pr =>
+        String(pr.number).includes(q) ||
+        pr.title.toLowerCase().includes(q) ||
+        (pr.assignees || []).some(a => a.toLowerCase().includes(q))
+      );
     }
 
     // Apply sorting
@@ -184,13 +209,25 @@ const AllPRsView: React.FC = () => {
           </p>
         </div>
         <div className="header-right">
-          <button className="refresh-button" onClick={loadAllPRs} disabled={loading}>
-            ↻ Refresh
-          </button>
+          <input
+            type="search"
+            className="pr-search"
+            placeholder="Filter by #, title, or assignee…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Filter open PRs"
+          />
+          <RefreshControls
+            lastUpdated={lastUpdated}
+            loading={loading}
+            onRefresh={loadAllPRs}
+            autoRefresh={autoRefresh}
+            onToggleAutoRefresh={setAutoRefresh}
+          />
         </div>
       </div>
 
-      {loading && (
+      {loading && prs.length === 0 && (
         <div className="loading-container">
           <div className="spinner"></div>
           <p>Loading PRs...</p>
@@ -204,8 +241,9 @@ const AllPRsView: React.FC = () => {
         </div>
       )}
 
-      {!loading && !error && (
+      {!error && (prs.length > 0 || !loading) && (
         <>
+          {loading && <div className="top-progress-bar" />}
           <div className="stats-summary">
             <div
               className={`stat-box clickable ${activeFilter === 'all' ? 'active' : ''}`}
@@ -435,7 +473,13 @@ const AllPRsView: React.FC = () => {
             </table>
           </div>
 
-          {displayPRs.length === 0 && activeFilter === 'ready' && (
+          {displayPRs.length === 0 && search.trim() && (
+            <div className="no-results">
+              <p>No open PRs match "{search.trim()}".</p>
+            </div>
+          )}
+
+          {displayPRs.length === 0 && !search.trim() && activeFilter === 'ready' && (
             <div className="no-results">
               <p>No PRs are currently ready to merge.</p>
             </div>

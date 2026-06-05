@@ -29,6 +29,22 @@
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.pr-search {
+  padding: 8px 12px;
+  min-width: 240px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.pr-search:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 .refresh-button {

@@ -24,6 +24,12 @@ export const api = {
     return response.data;
   },
 
+  // Get flaky tests grouped by file (used for the Flaky tab count)
+  getFlakyTests: async (): Promise<any[]> => {
+    const response = await axiosInstance.get(`${API_BASE_URL}/test-results/flaky`);
+    return response.data;
+  },
+
   // Get specific PR by number
   getPR: async (prNumber: number): Promise<PRData> => {
     const response = await axiosInstance.get(`${API_BASE_URL}/pr/${prNumber}`);
