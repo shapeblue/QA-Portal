@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { UpgradeTestResult, UpgradeTestFilters, UpgradeTestStats } from '../types';
+import { UpgradeTestResult, UpgradeTestFilters } from '../types';
 import './UpgradeTests.css';
 
 interface GroupedTest {
@@ -13,7 +13,6 @@ interface GroupedTest {
 const UpgradeTests: React.FC = () => {
   const [tests, setTests] = useState<UpgradeTestResult[]>([]);
   const [filters, setFilters] = useState<UpgradeTestFilters | null>(null);
-  const [stats, setStats] = useState<UpgradeTestStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'heatmap' | 'history' | 'accordion'>('heatmap');
@@ -99,22 +98,23 @@ const UpgradeTests: React.FC = () => {
     return hvMap[hvVersion.toLowerCase()] || hvVersion;
   };
 
+  // Load once on mount. loadInitialData only touches stable state setters, so
+  // it intentionally has no dependencies.
   useEffect(() => {
     loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInitialData = async (retryCount = 0) => {
     setLoading(true);
     setError(null);
     try {
-      const [testsData, filtersData, statsData] = await Promise.all([
+      const [testsData, filtersData] = await Promise.all([
         api.getUpgradeTests(),
         api.getUpgradeTestFilters(),
-        api.getUpgradeTestStats(),
       ]);
       setTests(testsData);
       setFilters(filtersData);
-      setStats(statsData);
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to load upgrade tests';
       
@@ -179,30 +179,6 @@ const UpgradeTests: React.FC = () => {
       status: '',
     });
     loadInitialData();
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getRelativeTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
   };
 
   const togglePathExpansion = (path: string) => {
