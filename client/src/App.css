@@ -29,34 +29,32 @@ body {
   max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: start;
+  /* Logo left, title centered between two equal columns, right column balances. */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   gap: 24px;
 }
 
 .cloudstack-logo {
   height: 50px;
   width: auto;
-  flex-shrink: 0;
+  justify-self: start;
 }
 
 .header-text {
   text-align: center;
-  padding-top: 5px;
 }
 
 @media (max-width: 768px) {
   .header-content {
     grid-template-columns: 1fr;
     justify-items: center;
+    gap: 12px;
   }
-  
-  .header-text {
-    text-align: center;
-  }
-  
+
   .cloudstack-logo {
     height: 45px;
+    justify-self: center;
   }
 }
 
