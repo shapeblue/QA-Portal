@@ -1246,10 +1246,14 @@ app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response
 app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) => {
   try {
     const prNumber = parseInt(req.params.prNumber);
-    
+
+    if (isNaN(prNumber)) {
+      return res.status(400).json({ error: 'Invalid PR number' });
+    }
+
     // Get failures for this PR
     const failures = await queryWithRetry<any[]>(
-      `SELECT 
+      `SELECT
         id, pr_number, test_name, test_file, result, time_seconds,
         hypervisor, hypervisor_version, test_date, logs_url
        FROM test_results
@@ -1257,24 +1261,33 @@ app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) 
        ORDER BY test_name`,
       [prNumber]
     );
-    
-    // Classify each failure (common vs unique)
-    for (const failure of failures) {
-      // Count occurrences in other PRs
-      const occurrences = await queryWithRetry<any[]>(
-        `SELECT COUNT(DISTINCT pr_number) as count
+
+    // Classify each failure (common vs unique). Count how many OTHER PRs each
+    // test appears in with a single grouped query rather than one query per
+    // failure (previously an N+1 against a remote DB).
+    const testNames = Array.from(new Set(failures.map(f => f.test_name)));
+    const otherPRCounts = new Map<string, number>();
+
+    if (testNames.length > 0) {
+      const placeholders = testNames.map(() => '?').join(',');
+      const counts = await queryWithRetry<any[]>(
+        `SELECT test_name, COUNT(DISTINCT pr_number) as count
          FROM test_results
-         WHERE test_name = ?
-           AND pr_number != ?`,
-        [failure.test_name, prNumber]
+         WHERE test_name IN (${placeholders})
+           AND pr_number != ?
+         GROUP BY test_name`,
+        [...testNames, prNumber]
       );
-      
-      const otherPRCount = occurrences[0]?.count || 0;
+      counts.forEach(row => otherPRCounts.set(row.test_name, row.count));
+    }
+
+    for (const failure of failures) {
+      const otherPRCount = otherPRCounts.get(failure.test_name) || 0;
       failure.is_common = otherPRCount >= 2; // Seen in 2+ other PRs
       failure.occurrence_count = otherPRCount + 1; // Including this PR
       failure.severity = failure.is_common ? 'low' : 'high';
     }
-    
+
     res.json(failures);
   } catch (error) {
     console.error('Error fetching test failures:', error);

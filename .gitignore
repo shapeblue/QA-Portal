@@ -36,3 +36,8 @@ coverage/
 
 # Misc
 .cache/
+
+# Scratch / temp files (keep out of version control)
+*.backup
+*_temp.js
+*.temp.js
