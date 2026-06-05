@@ -12,7 +12,6 @@ jest.mock('./services/api', () => ({
   api: {
     getHealthPRs: jest.fn(),
     getAllOpenPRs: jest.fn(),
-    getReadyToMergePRs: jest.fn(),
     getPR: jest.fn(),
     parsePRNumber: jest.fn(),
     getUpgradeTests: jest.fn(),
@@ -26,7 +25,6 @@ const mockApi = api as jest.Mocked<typeof api>;
 beforeEach(() => {
   mockApi.getHealthPRs.mockResolvedValue([]);
   mockApi.getAllOpenPRs.mockResolvedValue([]);
-  mockApi.getReadyToMergePRs.mockResolvedValue([]);
   mockApi.getUpgradeTests.mockResolvedValue([]);
   mockApi.getUpgradeTestFilters.mockResolvedValue({} as any);
   mockApi.getUpgradeTestStats.mockResolvedValue({} as any);

@@ -184,7 +184,7 @@ const AllPRsView: React.FC = () => {
         </div>
         <div className="header-right">
           <button className="refresh-button" onClick={loadAllPRs} disabled={loading}>
-            🔄 Refresh
+            ↻ Refresh
           </button>
         </div>
       </div>

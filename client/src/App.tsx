@@ -9,6 +9,9 @@ import TestFailuresRouter from './components/TestFailuresRouter';
 import { api } from './services/api';
 import { PRData } from './types';
 
+// Single source of truth for the displayed app version (shown in header + footer).
+const APP_VERSION = 'v1.0.4';
+
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,7 +89,7 @@ function App() {
           <img src="/cloudstack-logo-color.svg" alt="Apache CloudStack" className="cloudstack-logo" />
           <div className="header-text">
             <h1>CloudStack PR Health Dashboard</h1>
-            <p className="subtitle">Monitor health checks and quality metrics for CloudStack [v0.1.1]</p>
+            <p className="subtitle">Monitor health checks and quality metrics for CloudStack [{APP_VERSION}]</p>
           </div>
         </div>
       </header>
@@ -187,7 +190,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>QA Portal - Health Check Dashboard | v1.0.4</p>
+        <p>QA Portal - Health Check Dashboard | {APP_VERSION}</p>
       </footer>
     </div>
   );
