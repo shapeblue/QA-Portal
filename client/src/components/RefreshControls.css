@@ -1,0 +1,43 @@
+.refresh-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.refresh-controls .last-updated {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.refresh-controls .auto-refresh-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.refresh-controls .refresh-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  background: var(--color-success);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.refresh-controls .refresh-btn:hover:not(:disabled) {
+  background: #22863a;
+}
+
+.refresh-controls .refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

@@ -213,10 +213,11 @@ sshpass -e ssh -o StrictHostKeyChecking=no $PRODUCTION_SERVER "
     set -e
     cd $PRODUCTION_PATH
     
-    # Build client
+    # Build client. CI=true makes CRA treat lint warnings as errors, so a lint
+    # regression fails the deploy (set -e) instead of shipping silently.
     if [ -d 'client' ]; then
         echo 'Building frontend...'
-        cd client && npm run build && cd ..
+        cd client && CI=true npm run build && cd ..
     fi
     
     # Build server (TypeScript)

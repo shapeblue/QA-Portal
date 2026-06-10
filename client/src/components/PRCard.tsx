@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PRData } from '../types';
+import { clickable } from '../utils/a11y';
 import './PRCard.css';
 
 interface PRCardProps {
@@ -73,7 +74,9 @@ const PRCard: React.FC<PRCardProps> = ({ pr }) => {
                   <div key={index} className="smoketest-wrapper">
                     <div
                       className={`smoketest-item ${test.status.toLowerCase()} ${canExpand ? 'expandable' : ''}`}
-                      onClick={() => canExpand && toggleTest(index)}
+                      {...(canExpand
+                        ? { ...clickable(() => toggleTest(index)), 'aria-expanded': expandedTests.has(index) }
+                        : {})}
                     >
                       {canExpand && (
                         <span className="expand-icon">

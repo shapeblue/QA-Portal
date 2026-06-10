@@ -1,6 +1,6 @@
 .pr-card {
-  background: white;
-  border: 1px solid #e1e4e8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
@@ -18,7 +18,7 @@
 }
 
 .pr-card-header h3 a {
-  color: #0366d6;
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -27,7 +27,7 @@
 }
 
 .pr-title {
-  color: #586069;
+  color: var(--text-secondary);
   margin: 0 0 16px 0;
   font-size: 14px;
 }
@@ -42,7 +42,7 @@
   margin: 0 0 8px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #24292e;
+  color: var(--text-primary);
 }
 
 .approval-stats {
@@ -59,8 +59,8 @@
 }
 
 .approval-item.approved {
-  background: #dcffe4;
-  color: #0e5c23;
+  background: var(--bg-success);
+  color: var(--color-success-text);
 }
 
 .approval-item.commented {
@@ -69,8 +69,8 @@
 }
 
 .approval-item.rejected {
-  background: #ffeef0;
-  color: #86181d;
+  background: var(--bg-danger);
+  color: var(--color-danger-text);
 }
 
 .smoketest-results {
@@ -105,13 +105,13 @@
 }
 
 .smoketest-item.ok {
-  background: #dcffe4;
-  color: #0e5c23;
+  background: var(--bg-success);
+  color: var(--color-success-text);
 }
 
 .smoketest-item.fail {
-  background: #ffeef0;
-  color: #86181d;
+  background: var(--bg-danger);
+  color: var(--color-danger-text);
 }
 
 .smoketest-item .hypervisor {
@@ -133,14 +133,14 @@
   margin-top: 4px;
   padding: 12px;
   background: rgba(134, 24, 29, 0.05);
-  border-left: 3px solid #86181d;
+  border-left: 3px solid var(--color-danger-text);
   border-radius: 0 4px 4px 0;
 }
 
 .failed-tests-header {
   font-weight: 600;
   font-size: 13px;
-  color: #86181d;
+  color: var(--color-danger-text);
   margin-bottom: 8px;
 }
 
@@ -157,10 +157,10 @@
   font-family: 'Courier New', monospace;
   font-size: 12px;
   padding: 4px 8px;
-  background: white;
+  background: var(--surface);
   border-radius: 3px;
-  color: #86181d;
-  border-left: 2px solid #d73a49;
+  color: var(--color-danger-text);
+  border-left: 2px solid var(--color-danger);
 }
 
 .hypervisor-logs-icon {
@@ -181,7 +181,7 @@
 
 .logs-link,
 .coverage-link {
-  color: #0366d6;
+  color: var(--color-primary);
   text-decoration: none;
   font-size: 14px;
 }
@@ -199,24 +199,24 @@
 }
 
 .coverage-info .positive {
-  color: #0e5c23;
+  color: var(--color-success-text);
 }
 
 .coverage-info .negative {
-  color: #86181d;
+  color: var(--color-danger-text);
 }
 
 .pr-date {
-  color: #586069;
+  color: var(--text-secondary);
   font-size: 13px;
   margin-top: 8px;
   padding-top: 12px;
-  border-top: 1px solid #e1e4e8;
+  border-top: 1px solid var(--border);
 }
 
 .test-date {
   font-size: 12px;
-  color: #586069;
+  color: var(--text-secondary);
   margin-left: 8px;
   font-family: monospace;
 }

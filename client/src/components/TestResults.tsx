@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { clickable } from '../utils/a11y';
 import './TestResults.css';
 
 interface Platform {
@@ -137,9 +138,10 @@ const TestResults: React.FC = () => {
         <div className="test-files-list">
           {testFiles.map((file, fileIndex) => (
             <div key={fileIndex} className="test-file-group">
-              <div 
+              <div
                 className="test-file-header"
-                onClick={() => toggleFile(file.test_file)}
+                {...clickable(() => toggleFile(file.test_file))}
+                aria-expanded={expandedFiles.has(file.test_file)}
               >
                 <span className="expand-icon">
                   {expandedFiles.has(file.test_file) ? '▼' : '▶'}

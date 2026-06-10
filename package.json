@@ -12,7 +12,9 @@
     "build:server": "cd server && tsc",
     "start": "node server/dist/index.js",
     "clean": "rm -rf client/build server/dist",
-    "test": "cd client && npm test",
+    "test": "npm run test:server && npm run test:client",
+    "test:server": "cd server && node --require ts-node/register --test src/**/*.test.ts",
+    "test:client": "cd client && CI=true npm test",
     "lint": "cd client && npm run lint",
     "install:all": "npm install && cd client && npm install && cd .."
   },
@@ -33,7 +35,11 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "mysql2": "^3.15.3"
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "mysql2": "^3.15.3",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

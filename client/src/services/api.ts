@@ -24,9 +24,9 @@ export const api = {
     return response.data;
   },
 
-  // Get ready to merge PRs
-  getReadyToMergePRs: async (): Promise<PRData[]> => {
-    const response = await axiosInstance.get(`${API_BASE_URL}/ready-to-merge`);
+  // Get flaky tests grouped by file (used for the Flaky tab count)
+  getFlakyTests: async (): Promise<any[]> => {
+    const response = await axiosInstance.get(`${API_BASE_URL}/test-results/flaky`);
     return response.data;
   },
 

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { PRData } from '../types';
 import { api } from '../services/api';
+import { clickable } from '../utils/a11y';
+import RefreshControls from './RefreshControls';
 import './AllPRsView.css';
+
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 interface PRWithStatus extends PRData {
   meetsApprovalCriteria: boolean;
@@ -22,10 +26,21 @@ const AllPRsView: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortField, setSortField] = useState<SortField>('status');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [search, setSearch] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   useEffect(() => {
     loadAllPRs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => loadAllPRs(), AUTO_REFRESH_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh]);
 
   const loadAllPRs = async () => {
     setLoading(true);
@@ -74,6 +89,7 @@ const AllPRsView: React.FC = () => {
       });
       
       setPRs(prsWithStatus);
+      setLastUpdated(new Date());
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to load PRs');
     } finally {
@@ -107,6 +123,16 @@ const AllPRsView: React.FC = () => {
         break;
       default:
         filtered = prs;
+    }
+
+    // Free-text search over number, title, and assignees
+    const q = search.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter(pr =>
+        String(pr.number).includes(q) ||
+        pr.title.toLowerCase().includes(q) ||
+        (pr.assignees || []).some(a => a.toLowerCase().includes(q))
+      );
     }
 
     // Apply sorting
@@ -183,13 +209,25 @@ const AllPRsView: React.FC = () => {
           </p>
         </div>
         <div className="header-right">
-          <button className="refresh-button" onClick={loadAllPRs} disabled={loading}>
-            🔄 Refresh
-          </button>
+          <input
+            type="search"
+            className="pr-search"
+            placeholder="Filter by #, title, or assignee…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Filter open PRs"
+          />
+          <RefreshControls
+            lastUpdated={lastUpdated}
+            loading={loading}
+            onRefresh={loadAllPRs}
+            autoRefresh={autoRefresh}
+            onToggleAutoRefresh={setAutoRefresh}
+          />
         </div>
       </div>
 
-      {loading && (
+      {loading && prs.length === 0 && (
         <div className="loading-container">
           <div className="spinner"></div>
           <p>Loading PRs...</p>
@@ -203,44 +241,50 @@ const AllPRsView: React.FC = () => {
         </div>
       )}
 
-      {!loading && !error && (
+      {!error && (prs.length > 0 || !loading) && (
         <>
+          {loading && <div className="top-progress-bar" />}
           <div className="stats-summary">
-            <div 
+            <div
               className={`stat-box clickable ${activeFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('all')}
+              {...clickable(() => setActiveFilter('all'))}
+              aria-pressed={activeFilter === 'all'}
               title="Click to show all PRs"
             >
               <div className="stat-number">{prs.length}</div>
               <div className="stat-label">Total Open</div>
             </div>
-            <div 
+            <div
               className={`stat-box ready clickable ${activeFilter === 'ready' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('ready')}
+              {...clickable(() => setActiveFilter('ready'))}
+              aria-pressed={activeFilter === 'ready'}
               title="Click to show only ready to merge PRs"
             >
               <div className="stat-number">{readyCount}</div>
               <div className="stat-label">Ready to Merge</div>
             </div>
-            <div 
+            <div
               className={`stat-box clickable ${activeFilter === 'has-approvals' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('has-approvals')}
+              {...clickable(() => setActiveFilter('has-approvals'))}
+              aria-pressed={activeFilter === 'has-approvals'}
               title="Click to show PRs with 2+ LGTMs"
             >
               <div className="stat-number">{prs.filter(pr => pr.meetsApprovalCriteria).length}</div>
               <div className="stat-label">Has 2+ LGTMs</div>
             </div>
-            <div 
+            <div
               className={`stat-box clickable ${activeFilter === 'has-tests' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('has-tests')}
+              {...clickable(() => setActiveFilter('has-tests'))}
+              aria-pressed={activeFilter === 'has-tests'}
               title="Click to show PRs with all tests passing"
             >
               <div className="stat-number">{prs.filter(pr => pr.meetsTestCriteria).length}</div>
               <div className="stat-label">All Tests Pass</div>
             </div>
-            <div 
+            <div
               className={`stat-box needs-testing clickable ${activeFilter === 'needs-testing' ? 'active' : ''}`}
-              onClick={() => setActiveFilter('needs-testing')}
+              {...clickable(() => setActiveFilter('needs-testing'))}
+              aria-pressed={activeFilter === 'needs-testing'}
               title="Click to show PRs that need testing"
             >
               <div className="stat-number">{needsTestingCount}</div>
@@ -283,15 +327,15 @@ const AllPRsView: React.FC = () => {
                     className={`pr-row ${pr.isReadyToMerge ? 'ready-to-merge' : ''}`}
                   >
                     <td className="status-cell">
-                      {pr.isReadyToMerge && <span className="status-badge ready" title="Ready to Merge">✅</span>}
+                      {pr.isReadyToMerge && <span className="status-badge ready" role="img" aria-label="Ready to merge" title="Ready to Merge">✅</span>}
                       {!pr.isReadyToMerge && pr.meetsApprovalCriteria && !pr.meetsTestCriteria && (
-                        <span className="status-badge partial" title="Has approvals, waiting on tests">🧪</span>
+                        <span className="status-badge partial" role="img" aria-label="Has approvals, waiting on tests" title="Has approvals, waiting on tests">🧪</span>
                       )}
                       {!pr.isReadyToMerge && !pr.meetsApprovalCriteria && pr.meetsTestCriteria && (
-                        <span className="status-badge partial" title="Tests pass, needs approvals">✓</span>
+                        <span className="status-badge partial" role="img" aria-label="Tests pass, needs approvals" title="Tests pass, needs approvals">✓</span>
                       )}
                       {!pr.meetsApprovalCriteria && !pr.meetsTestCriteria && (
-                        <span className="status-badge pending" title="Pending">⚠️</span>
+                        <span className="status-badge pending" role="img" aria-label="Pending" title="Pending">⚠️</span>
                       )}
                     </td>
                     <td className="pr-number-cell">
@@ -340,8 +384,7 @@ const AllPRsView: React.FC = () => {
                           const hasFailed = pr.packageBuilds.packages.some(pkg => pkg.startsWith('!')) || 
                                            pr.packageBuilds.buildStatus === 'failed';
                           const isStale = pr.packageBuilds.isStale;
-                          const isFresh = !hasFailed && !isStale;
-                          
+
                           // Determine display with package icons
                           const icon = hasFailed ? '❌' : (isStale ? '📦' : '📦');
                           const statusClass = hasFailed ? 'failed' : isStale ? 'stale' : 'fresh';
@@ -363,6 +406,7 @@ const AllPRsView: React.FC = () => {
                               target="_blank"
                               rel="noopener noreferrer"
                               className={`package-status ${statusClass}`}
+                              aria-label={`Packages: ${statusText}`}
                               title={tooltipText}
                             >
                               {icon}
@@ -429,7 +473,13 @@ const AllPRsView: React.FC = () => {
             </table>
           </div>
 
-          {displayPRs.length === 0 && activeFilter === 'ready' && (
+          {displayPRs.length === 0 && search.trim() && (
+            <div className="no-results">
+              <p>No open PRs match "{search.trim()}".</p>
+            </div>
+          )}
+
+          {displayPRs.length === 0 && !search.trim() && activeFilter === 'ready' && (
             <div className="no-results">
               <p>No PRs are currently ready to merge.</p>
             </div>

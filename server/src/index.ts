@@ -1,17 +1,60 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import pino from 'pino';
+import pinoHttp from 'pino-http';
 import mysql from 'mysql2/promise';
 import axios from 'axios';
+import { parseSmokeTests, SmokeTestResult } from './parsers/trillian';
+import { parseCodeCoverage } from './parsers/codecov';
 
 dotenv.config();
+
+// Structured logger. Set LOG_LEVEL=debug locally for verbose output.
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '5001');
 
-// Middleware
-app.use(cors());
+// Behind nginx in production — trust the proxy so rate-limit sees the real client IP.
+app.set('trust proxy', 1);
+
+// Security headers. The dashboard is intentionally public (see ADR-0002), so we add
+// baseline hardening rather than auth.
+app.use(helmet());
+
+// CORS scoped to the portal's own origin. CORS_ORIGIN may be a comma-separated list;
+// if unset we fall back to reflecting any origin (dev convenience only).
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : undefined;
+app.use(cors(corsOrigins ? { origin: corsOrigins } : {}));
+
 app.use(express.json());
+
+// Request logging.
+app.use(pinoHttp({ logger }));
+
+// Generous global rate limit — protects against accidental floods without hurting the
+// public read traffic. The token-spending artifact proxy gets a much stricter limit below.
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', globalLimiter);
+
+// Strict per-IP limit for the GitHub-token-spending artifact proxy (see ADR-0002).
+const artifactLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many artifact download requests, please slow down' },
+});
 
 // Database configuration
 const dbConfig = {
@@ -30,7 +73,7 @@ const dbConfig = {
 
 // Create database connection pool
 const pool = mysql.createPool(dbConfig);
-console.log('Database connection pool created');
+logger.info('Database connection pool created');
 
 // Helper function to execute queries with retry logic
 async function queryWithRetry<T = any>(
@@ -47,7 +90,7 @@ async function queryWithRetry<T = any>(
       const isTimeout = error.code === 'ETIMEDOUT' || error.errno === -60;
       
       if (isTimeout && !isLastAttempt) {
-        console.log(`Query timeout, retrying... (attempt ${attempt + 1}/${retries})`);
+        logger.warn(`Query timeout, retrying... (attempt ${attempt + 1}/${retries})`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
         continue;
       }
@@ -58,18 +101,7 @@ async function queryWithRetry<T = any>(
   throw new Error('Query failed after all retries');
 }
 
-// Types
-interface SmokeTestResult {
-  hypervisor: string;
-  version?: string | null;
-  passed: number;
-  total: number;
-  status: 'OK' | 'FAIL';
-  logsUrl?: string;
-  failedTests?: string[];
-  createdAt?: string;
-}
-
+// Types (SmokeTestResult is defined alongside its parser in ./parsers/trillian)
 interface PRData {
   number: number;
   title: string;
@@ -195,7 +227,7 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
          AND pa1.approval_created_at = pa2.max_date`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch approvals:', err.message);
+      logger.warn({ err: err.message, source: 'pr_approvals' }, 'Schema drift: could not fetch approvals');
       return [];
     })
   ]);
@@ -227,161 +259,16 @@ async function getHealthPRsFromDatabase(): Promise<PRData[]> {
     const reviewResults = reviewsByPR.get(row.pr_number) || [];
     
     // Parse smoke tests from Trillian comments
-    const smokeTests: SmokeTestResult[] = trillianResults
-      .map((tr: any): SmokeTestResult | null => {
-        const comment = tr.trillian_comment || '';
-        let passed = 0;
-        let total = 0;
-        
-        // Parse "141 look OK, 0 have errors" pattern
-        const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
-        const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
-        
-        if (okMatch) passed = parseInt(okMatch[1]);
-        if (errorMatch && okMatch) total = passed + parseInt(errorMatch[1]);
-        
-        // Get logs URL from database field (preferred) or extract from comment as fallback
-        let logsUrl = tr.logs_url;
-        if (!logsUrl) {
-          const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-          logsUrl = logsMatch ? logsMatch[0] : undefined;
-        }
-        
-        // Extract failed test names from markdown table format
-        const failedTests: string[] = [];
-        if (errorMatch && parseInt(errorMatch[1]) > 0) {
-          // Parse markdown table format:
-          // Test | Result | Time (s) | Test File
-          // --- | --- | --- | ---
-          // test_name | `Error` | 1.10 | test_file.py
-          
-          const lines = comment.split('\n');
-          let inTable = false;
-          
-          for (const line of lines) {
-            // Check if we're starting a table (header with "Test | Result")
-            if (line.includes('Test') && line.includes('Result') && line.includes('|')) {
-              inTable = true;
-              continue;
-            }
-            
-            // Skip separator line (--- | --- | ---)
-            if (line.trim().startsWith('---')) {
-              continue;
-            }
-            
-            // If we're in a table and line has pipes, parse it
-            if (inTable && line.includes('|')) {
-              const columns = line.split('|').map((col: string) => col.trim());
-              if (columns.length >= 2) {
-                const testName = columns[0];
-                const result = columns[1];
-                
-                // Check if this is a failed test (Error, Fail, etc.)
-                if (testName.startsWith('test_') && 
-                    (result.toLowerCase().includes('error') || 
-                     result.toLowerCase().includes('fail'))) {
-                  if (!failedTests.includes(testName)) {
-                    failedTests.push(testName);
-                  }
-                }
-              }
-            } else if (inTable && line.trim() === '') {
-              // Empty line might mean end of table
-              inTable = false;
-            }
-          }
-          
-          // Fallback: also try simple pattern matching if table parsing didn't work
-          if (failedTests.length === 0) {
-            const testErrorPattern = /(test_\w+)[\s.]*(?:ERROR|FAIL|FAILED)/gi;
-            let match;
-            while ((match = testErrorPattern.exec(comment)) !== null) {
-              if (!failedTests.includes(match[1])) {
-                failedTests.push(match[1]);
-              }
-            }
-          }
-        }
-        
-        // Only return if we found actual test results
-        if (okMatch && total > 0) {
-          // Extract version from hypervisor name if not already in version field
-          let version = tr.version;
-          let hypervisor = tr.hypervisor;
-          
-          if (!version && hypervisor) {
-            // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
-            const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
-            if (hvMatch) {
-              const hvName = hvMatch[1];
-              const hvVersion = hvMatch[2];
-              // Only extract if the second part looks like a version (contains numbers)
-              if (/\d/.test(hvVersion)) {
-                hypervisor = hvName;
-                version = hvVersion;
-              }
-            }
-          }
-          
-          return {
-            hypervisor: hypervisor?.toUpperCase() || 'UNKNOWN',
-            version: version || null,
-            passed,
-            total,
-            status: (errorMatch && parseInt(errorMatch[1]) > 0) ? 'FAIL' as const : 'OK' as const,
-            logsUrl,
-            failedTests: failedTests.length > 0 ? failedTests : undefined,
-            createdAt: tr.trillian_created_at
-          };
-        }
-        return null;
-      })
-      .filter((test): test is SmokeTestResult => test !== null);
-    
-    // Extract logs URL from Trillian comment
-    let logsUrl: string | undefined;
-    if (trillianResults.length > 0) {
-      const comment = trillianResults[0].trillian_comment || '';
-      const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-      if (logsMatch) logsUrl = logsMatch[0];
-    }
-    
+    const smokeTests: SmokeTestResult[] = parseSmokeTests(trillianResults);
+
+    // Logs URL for the PR as a whole (first hypervisor's, if any)
+    const logsUrl = smokeTests.find(t => t.logsUrl)?.logsUrl;
+
     // Parse code coverage from codecov comment
-    let codeCoverage: { percentage: number; change: number; url: string } | undefined;
-    if (codecovResults.length > 0) {
-      const codecovComment = codecovResults[0].codecov_comment || '';
-      
-      // Try to parse coverage percentage - common formats:
-      // "Coverage: 85.23%" or "85.23% (+2.1%)" or "Coverage is 85.23%"
-      const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
-      
-      // Try to parse coverage change - formats: "+2.1%" or "-1.5%" or "increased by 2.1%"
-      const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || 
-                          codecovComment.match(/(increased|decreased)\s+by\s+(\d+\.?\d*)%/i);
-      
-      // Extract codecov URL
-      const urlMatch = codecovComment.match(/(https?:\/\/(?:app\.)?codecov\.io\/[^\s)]+)/i);
-      
-      if (coverageMatch) {
-        let change = 0;
-        if (changeMatch) {
-          if (changeMatch[1] && (changeMatch[1] === 'increased' || changeMatch[1] === 'decreased')) {
-            change = parseFloat(changeMatch[2] || '0');
-            if (changeMatch[1] === 'decreased') change = -change;
-          } else {
-            change = parseFloat(changeMatch[1]);
-          }
-        }
-        
-        codeCoverage = {
-          percentage: parseFloat(coverageMatch[1]),
-          change: change,
-          url: urlMatch ? urlMatch[1] : `https://app.codecov.io/gh/apache/cloudstack/pull/${row.pr_number}`
-        };
-      }
-    }
-    
+    const codeCoverage = codecovResults.length > 0
+      ? parseCodeCoverage(codecovResults[0].codecov_comment || '', row.pr_number)
+      : undefined;
+
     // Count review states
     const approvals = {
       approved: reviewResults.filter((r: any) => r.state === 'APPROVED').length,
@@ -462,110 +349,10 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
   }
   
   // Parse smoke tests
-  const smokeTests: SmokeTestResult[] = trillianResults
-    .map((tr: any): SmokeTestResult | null => {
-      const comment = tr.trillian_comment || '';
-      let passed = 0;
-      let total = 0;
-      
-      const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
-      const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
-      const skippedMatch = comment.match(/(\d+)\s+did\s+not\s+run/i);
-      
-      if (okMatch) passed = parseInt(okMatch[1]);
-      if (errorMatch && okMatch) {
-        total = passed + parseInt(errorMatch[1]);
-        // Also add skipped tests to total if present
-        if (skippedMatch) {
-          total += parseInt(skippedMatch[1]);
-        }
-      } else if (okMatch && skippedMatch) {
-        // If only OK and skipped (no errors)
-        total = passed + parseInt(skippedMatch[1]);
-      } else if (okMatch) {
-        // If only OK count, use it as total
-        total = passed;
-      }
-      
-      // Extract logs URL for this hypervisor
-      const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-      const logsUrl = logsMatch ? logsMatch[0] : undefined;
-      
-      // Extract failed test names
-      const failedTests: string[] = [];
-      if (errorMatch && parseInt(errorMatch[1]) > 0) {
-        // Parse markdown table format: "test_name | `Error` | time | file"
-        const tableRowPattern = /^\s*(\w*test_\w+)\s*\|\s*`(Error|Failure|error|failure)`/gm;
-        let match;
-        while ((match = tableRowPattern.exec(comment)) !== null) {
-          const testName = match[1];
-          if (testName && !failedTests.includes(testName)) {
-            failedTests.push(testName);
-          }
-        }
-        
-        // Fallback: parse simple "test_name ERROR/FAIL" pattern
-        if (failedTests.length === 0) {
-          const testErrorPattern = /(test_\w+)[\s.]*(?:ERROR|FAIL|FAILED)/gi;
-          while ((match = testErrorPattern.exec(comment)) !== null) {
-            if (!failedTests.includes(match[1])) {
-              failedTests.push(match[1]);
-            }
-          }
-        }
-        
-        // Verify we found the right number of failed tests
-        const expectedFailures = parseInt(errorMatch[1]);
-        if (failedTests.length > 0 && failedTests.length !== expectedFailures) {
-          console.warn(`PR #${prNumber} ${tr.hypervisor}: Found ${failedTests.length} failed test names but summary says ${expectedFailures} failures`);
-        }
-      }
-      
-      // Only return if we found actual test results
-      if (okMatch && total > 0) {
-        const hasErrors = errorMatch && parseInt(errorMatch[1]) > 0;
-        
-        // Extract version from hypervisor name if not already in version field
-        let version = tr.version;
-        let hypervisor = tr.hypervisor;
-        
-        if (!version && hypervisor) {
-          // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
-          const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
-          if (hvMatch) {
-            const hvName = hvMatch[1];
-            const hvVersion = hvMatch[2];
-            // Only extract if the second part looks like a version (contains numbers)
-            if (/\d/.test(hvVersion)) {
-              hypervisor = hvName;
-              version = hvVersion;
-            }
-          }
-        }
-        
-        return {
-          hypervisor: hypervisor?.toUpperCase() || 'UNKNOWN',
-          version: version || null,
-          passed,
-          total,
-          status: hasErrors ? 'FAIL' as const : 'OK' as const,
-          logsUrl,
-          // Always include failedTests array when there are errors (even if parsing failed)
-          failedTests: hasErrors ? (failedTests.length > 0 ? failedTests : []) : undefined,
-          createdAt: tr.trillian_created_at
-        };
-      }
-      return null;
-    })
-    .filter((test): test is SmokeTestResult => test !== null);
-  
-  let logsUrl: string | undefined;
-  if (trillianResults.length > 0) {
-    const comment = trillianResults[0].trillian_comment || '';
-    const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-    if (logsMatch) logsUrl = logsMatch[0];
-  }
-  
+  const smokeTests: SmokeTestResult[] = parseSmokeTests(trillianResults);
+
+  const logsUrl = smokeTests.find(t => t.logsUrl)?.logsUrl;
+
   // Get codecov data
   const codecovResults = await queryWithRetry<any[]>(
     'SELECT codecov_comment, codecov_created_at FROM pr_codecov_comments WHERE pr_number = ? LIMIT 1',
@@ -589,38 +376,14 @@ async function getPRFromDatabase(prNumber: number): Promise<PRData | null> {
       [prNumber, prNumber]
     );
   } catch (err: any) {
-    console.warn(`Could not fetch approvals for PR #${prNumber}:`, err.message);
+    logger.warn({ err: err.message, source: 'pr_approvals', prNumber }, 'Schema drift: could not fetch approvals for PR');
   }
   
   // Parse code coverage
-  let codeCoverage: { percentage: number; change: number; url: string } | undefined;
-  if (codecovResults.length > 0) {
-    const codecovComment = codecovResults[0].codecov_comment || '';
-    
-    const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
-    const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || 
-                        codecovComment.match(/(increased|decreased)\s+by\s+(\d+\.?\d*)%/i);
-    const urlMatch = codecovComment.match(/(https?:\/\/(?:app\.)?codecov\.io\/[^\s)]+)/i);
-    
-    if (coverageMatch) {
-      let change = 0;
-      if (changeMatch) {
-        if (changeMatch[1] && (changeMatch[1] === 'increased' || changeMatch[1] === 'decreased')) {
-          change = parseFloat(changeMatch[2] || '0');
-          if (changeMatch[1] === 'decreased') change = -change;
-        } else {
-          change = parseFloat(changeMatch[1]);
-        }
-      }
-      
-      codeCoverage = {
-        percentage: parseFloat(coverageMatch[1]),
-        change: change,
-        url: urlMatch ? urlMatch[1] : `https://app.codecov.io/gh/apache/cloudstack/pull/${prNumber}`
-      };
-    }
-  }
-  
+  const codeCoverage = codecovResults.length > 0
+    ? parseCodeCoverage(codecovResults[0].codecov_comment || '', prNumber)
+    : undefined;
+
   // Count review states
   const approvals = {
     approved: reviewResults.filter((r: any) => r.state === 'APPROVED').length,
@@ -786,7 +549,6 @@ async function getUpgradeTestStats() {
 
 // Get ALL open PRs (not just health check labeled ones)
 async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
-  console.log('[DEBUG] getAllOpenPRsFromDatabase called');
   // Get all unique open PRs from multiple sources, using pr_states for accurate state
   const allPRs = await queryWithRetry<any[]>(`
     SELECT 
@@ -870,14 +632,14 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
          AND pa1.approval_created_at = pa2.max_date`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch approvals:', err.message);
+      logger.warn({ err: err.message, source: 'pr_approvals' }, 'Schema drift: could not fetch approvals');
       return [];
     }),
     queryWithRetry<any[]>(
       `SELECT DISTINCT pr_number, label_name FROM pr_health_labels WHERE pr_number IN (${prNumbers.map(() => '?').join(',')})`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch labels:', err.message);
+      logger.warn({ err: err.message, source: 'pr_health_labels' }, 'Schema drift: could not fetch labels');
       return [];
     }),
     queryWithRetry<any[]>(
@@ -887,7 +649,7 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
        ORDER BY comment_created_at DESC`,
       prNumbers
     ).catch(err => {
-      console.warn('Could not fetch package builds:', err.message);
+      logger.warn({ err: err.message, source: 'pr_package_builds' }, 'Schema drift: could not fetch package builds');
       return [];
     })
   ]);
@@ -901,95 +663,13 @@ async function getAllOpenPRsFromDatabase(): Promise<PRData[]> {
     const trillianResults = allTrillianResults.filter((tr: any) => tr.pr_number === prNumber);
     
     // Parse smoke tests
-    const smokeTests: SmokeTestResult[] = trillianResults
-      .map((tr: any): SmokeTestResult | null => {
-        const comment = tr.trillian_comment || '';
-        let passed = 0;
-        let total = 0;
-        
-        const okMatch = comment.match(/(\d+)\s+look\s+OK/i);
-        const errorMatch = comment.match(/(\d+)\s+have\s+errors/i);
-        const skippedMatch = comment.match(/(\d+)\s+did\s+not\s+run/i);
-        
-        if (okMatch) passed = parseInt(okMatch[1]);
-        if (errorMatch && okMatch) {
-          total = passed + parseInt(errorMatch[1]);
-          if (skippedMatch) {
-            total += parseInt(skippedMatch[1]);
-          }
-        } else if (okMatch && skippedMatch) {
-          total = passed + parseInt(skippedMatch[1]);
-        } else if (okMatch) {
-          total = passed;
-        }
-        
-        if (!tr.hypervisor || total === 0) return null;
-        
-        console.log(`[DEBUG getAllOpenPRs] Processing PR #${prNumber} hypervisor:`, tr.hypervisor, 'version:', tr.version, 'total:', total);
-        
-        const status = passed === total ? 'OK' : 'FAIL';
-        
-        // Get logs URL from database field (preferred) or extract from comment as fallback
-        let logsUrl = tr.logs_url;
-        if (!logsUrl) {
-          const logsMatch = comment.match(/https:\/\/[^\s)]+\.zip/i);
-          logsUrl = logsMatch ? logsMatch[0] : undefined;
-        }
-        
-        // Extract version from hypervisor name if not already in version field
-        let version = tr.version;
-        let hypervisor = tr.hypervisor;
-        
-        if (!version && hypervisor) {
-          // Try to extract version from hypervisor name (e.g., "xcpng82" -> hypervisor="xcpng", version="82")
-          const hvMatch = hypervisor.match(/^([a-z]+)(.+)$/i);
-          if (hvMatch) {
-            const hvName = hvMatch[1];
-            const hvVersion = hvMatch[2];
-            // Only extract if the second part looks like a version (contains numbers)
-            if (/\d/.test(hvVersion)) {
-              console.log(`[DEBUG] Extracted version from ${hypervisor}: hv=${hvName}, ver=${hvVersion}`);
-              hypervisor = hvName;
-              version = hvVersion;
-            }
-          }
-        }
-        
-        return {
-          hypervisor: hypervisor.toUpperCase(),
-          version: version || null,
-          passed,
-          total,
-          status,
-          logsUrl,
-          createdAt: tr.trillian_created_at || new Date().toISOString()
-        };
-      })
-      .filter((st): st is SmokeTestResult => st !== null);
+    const smokeTests: SmokeTestResult[] = parseSmokeTests(trillianResults);
 
     // Get codecov for this PR
     const codecovResults = allCodecovResults.filter((cc: any) => cc.pr_number === prNumber);
-    let codeCoverage: { percentage: number; change: number; url: string } | undefined;
-    if (codecovResults.length > 0 && codecovResults[0].codecov_comment) {
-      const codecovComment = codecovResults[0].codecov_comment || '';
-      const coverageMatch = codecovComment.match(/(\d+\.?\d*)%/);
-      const changeMatch = codecovComment.match(/([+-]\d+\.?\d*)%/) || codecovComment.match(/(\d+\.?\d*)% of diff/);
-      
-      if (coverageMatch) {
-        const percentage = parseFloat(coverageMatch[1]);
-        let change = 0;
-        if (changeMatch) {
-          const changeStr = changeMatch[1];
-          change = parseFloat(changeStr);
-        }
-        
-        codeCoverage = {
-          percentage,
-          change,
-          url: `https://github.com/apache/cloudstack/pull/${prNumber}`
-        };
-      }
-    }
+    const codeCoverage = codecovResults.length > 0
+      ? parseCodeCoverage(codecovResults[0].codecov_comment || '', prNumber)
+      : undefined;
 
     // Get reviews for this PR
     const reviewResults = allReviewResults.filter((r: any) => r.pr_number === prNumber);
@@ -1079,20 +759,18 @@ app.get('/api/health-prs', async (req: Request, res: Response) => {
     const prData = await getHealthPRsFromDatabase();
     res.json(prData);
   } catch (error: any) {
-    console.error('Error fetching health PRs:', error);
+    logger.error({ err: error }, 'Error fetching health PRs');
     res.status(500).json({ error: error.message || 'Failed to fetch health check PRs' });
   }
 });
 
 // Get ALL open PRs
 app.get('/api/all-open-prs', async (req: Request, res: Response) => {
-  console.log('[DEBUG] /api/all-open-prs endpoint hit');
   try {
     const prData = await getAllOpenPRsFromDatabase();
-    console.log('[DEBUG] Returning', prData.length, 'PRs');
     res.json(prData);
   } catch (error: any) {
-    console.error('Error fetching all open PRs:', error);
+    logger.error({ err: error }, 'Error fetching all open PRs');
     res.status(500).json({ error: error.message || 'Failed to fetch all open PRs' });
   }
 });
@@ -1127,7 +805,7 @@ app.get('/api/ready-to-merge', async (req: Request, res: Response) => {
     
     res.json(readyPRs);
   } catch (error: any) {
-    console.error('Error fetching ready to merge PRs:', error);
+    logger.error({ err: error }, 'Error fetching ready to merge PRs');
     res.status(500).json({ error: error.message || 'Failed to fetch ready to merge PRs' });
   }
 });
@@ -1146,7 +824,7 @@ app.get('/api/upgrade-tests', async (req: Request, res: Response) => {
     const results = await getUpgradeTestsFromDatabase(filters);
     res.json(results);
   } catch (error: any) {
-    console.error('Error fetching upgrade tests:', error);
+    logger.error({ err: error }, 'Error fetching upgrade tests');
     res.status(500).json({ error: error.message || 'Failed to fetch upgrade tests' });
   }
 });
@@ -1156,7 +834,7 @@ app.get('/api/upgrade-tests/filters', async (req: Request, res: Response) => {
     const filters = await getUpgradeTestFilters();
     res.json(filters);
   } catch (error: any) {
-    console.error('Error fetching upgrade test filters:', error);
+    logger.error({ err: error }, 'Error fetching upgrade test filters');
     res.status(500).json({ error: error.message || 'Failed to fetch filters' });
   }
 });
@@ -1166,7 +844,7 @@ app.get('/api/upgrade-tests/stats', async (req: Request, res: Response) => {
     const stats = await getUpgradeTestStats();
     res.json(stats);
   } catch (error: any) {
-    console.error('Error fetching upgrade test stats:', error);
+    logger.error({ err: error }, 'Error fetching upgrade test stats');
     res.status(500).json({ error: error.message || 'Failed to fetch stats' });
   }
 });
@@ -1188,15 +866,21 @@ app.get('/api/pr/:number', async (req: Request, res: Response) => {
 
     res.json(prData);
   } catch (error: any) {
-    console.error('Error fetching PR:', error);
+    logger.error({ err: error }, 'Error fetching PR');
     res.status(500).json({ error: error.message || 'Failed to fetch PR' });
   }
 });
 
-// Artifact download proxy endpoint
-app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response) => {
+// Artifact download proxy endpoint. Spends the server's GITHUB_TOKEN, so it is rate-limited
+// hard and only accepts numeric artifact IDs (see ADR-0002).
+app.get('/api/download-artifact/:artifactId', artifactLimiter, async (req: Request, res: Response) => {
   const { artifactId } = req.params;
-  
+
+  // Validate: GitHub artifact IDs are numeric. Reject anything else before spending the token.
+  if (!/^\d+$/.test(artifactId)) {
+    return res.status(400).json({ error: 'Invalid artifact ID' });
+  }
+
   try {
     const githubToken = process.env.GITHUB_TOKEN;
     if (!githubToken) {
@@ -1231,7 +915,7 @@ app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response
     // Pipe the stream to response
     downloadResponse.data.pipe(res);
   } catch (error: any) {
-    console.error('Error downloading artifact:', error.message);
+    logger.error({ err: error.message }, 'Error downloading artifact');
     if (error.response?.status === 410) {
       res.status(410).json({ error: 'Artifact has expired or been deleted' });
     } else if (error.response?.status === 404) {
@@ -1246,10 +930,14 @@ app.get('/api/download-artifact/:artifactId', async (req: Request, res: Response
 app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) => {
   try {
     const prNumber = parseInt(req.params.prNumber);
-    
+
+    if (isNaN(prNumber)) {
+      return res.status(400).json({ error: 'Invalid PR number' });
+    }
+
     // Get failures for this PR
     const failures = await queryWithRetry<any[]>(
-      `SELECT 
+      `SELECT
         id, pr_number, test_name, test_file, result, time_seconds,
         hypervisor, hypervisor_version, test_date, logs_url
        FROM test_results
@@ -1257,27 +945,36 @@ app.get('/api/prs/:prNumber/test-failures', async (req: Request, res: Response) 
        ORDER BY test_name`,
       [prNumber]
     );
-    
-    // Classify each failure (common vs unique)
-    for (const failure of failures) {
-      // Count occurrences in other PRs
-      const occurrences = await queryWithRetry<any[]>(
-        `SELECT COUNT(DISTINCT pr_number) as count
+
+    // Classify each failure (common vs unique). Count how many OTHER PRs each
+    // test appears in with a single grouped query rather than one query per
+    // failure (previously an N+1 against a remote DB).
+    const testNames = Array.from(new Set(failures.map(f => f.test_name)));
+    const otherPRCounts = new Map<string, number>();
+
+    if (testNames.length > 0) {
+      const placeholders = testNames.map(() => '?').join(',');
+      const counts = await queryWithRetry<any[]>(
+        `SELECT test_name, COUNT(DISTINCT pr_number) as count
          FROM test_results
-         WHERE test_name = ?
-           AND pr_number != ?`,
-        [failure.test_name, prNumber]
+         WHERE test_name IN (${placeholders})
+           AND pr_number != ?
+         GROUP BY test_name`,
+        [...testNames, prNumber]
       );
-      
-      const otherPRCount = occurrences[0]?.count || 0;
+      counts.forEach(row => otherPRCounts.set(row.test_name, row.count));
+    }
+
+    for (const failure of failures) {
+      const otherPRCount = otherPRCounts.get(failure.test_name) || 0;
       failure.is_common = otherPRCount >= 2; // Seen in 2+ other PRs
       failure.occurrence_count = otherPRCount + 1; // Including this PR
       failure.severity = failure.is_common ? 'low' : 'high';
     }
-    
+
     res.json(failures);
   } catch (error) {
-    console.error('Error fetching test failures:', error);
+    logger.error({ err: error }, 'Error fetching test failures');
     res.status(500).json({ error: 'Failed to fetch test failures' });
   }
 });
@@ -1384,7 +1081,7 @@ app.get('/api/test-failures/summary', async (req: Request, res: Response) => {
       byHypervisor
     });
   } catch (error) {
-    console.error('Error fetching test failures summary:', error);
+    logger.error({ err: error }, 'Error fetching test failures summary');
     res.status(500).json({ error: 'Failed to fetch test failures summary' });
   }
 });
@@ -1425,7 +1122,7 @@ app.get('/api/test-failures/test/:testName', async (req: Request, res: Response)
       history
     });
   } catch (error) {
-    console.error('Error fetching test failure history:', error);
+    logger.error({ err: error }, 'Error fetching test failure history');
     res.status(500).json({ error: 'Failed to fetch test failure history' });
   }
 });
@@ -1433,7 +1130,7 @@ app.get('/api/test-failures/test/:testName', async (req: Request, res: Response)
 // Get flaky tests - optimized version using summary table
 app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
   try {
-    console.log('Fetching flaky tests from summary table...');
+    logger.debug('Fetching flaky tests from summary table...');
     const rawData = await queryWithRetry<any[]>(
       `SELECT 
         test_name,
@@ -1521,23 +1218,34 @@ app.get('/api/test-results/flaky', async (req: Request, res: Response) => {
       };
     });
     
-    console.log(`Fetched ${flakyTestsByFile.length} flaky test files`);
+    logger.debug(`Fetched ${flakyTestsByFile.length} flaky test files`);
     res.json(flakyTestsByFile);
   } catch (error) {
-    console.error('Error fetching flaky tests:', error);
+    logger.error({ err: error }, 'Error fetching flaky tests');
     res.status(500).json({ error: 'Failed to fetch flaky tests' });
   }
 });
 
-// Health check endpoint
-app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString()
-  });
+// Health check endpoint — pings the DB so it reports unhealthy when the database is down.
+app.get('/api/health', async (req: Request, res: Response) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'OK',
+      database: 'up',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    logger.error({ err: error }, 'Health check failed: database unreachable');
+    res.status(503).json({
+      status: 'ERROR',
+      database: 'down',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on port ${PORT}`);
+  logger.info(`Server is running on port ${PORT}`);
 });
